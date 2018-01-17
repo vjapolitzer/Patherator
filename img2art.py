@@ -13,7 +13,7 @@ from os.path import basename, splitext
 from copy import deepcopy
 import random
 from operator import itemgetter
-import potrace
+import potrace, pyclipper
 import numpy as np
 import scipy
 from scipy import spatial
@@ -257,12 +257,13 @@ class ImgPathGenerator:
                         prevPoint = point
         self.__endGcode()
 
-    def __drawShapes(self, shapes, includeDots = True):
+    def __drawShapes(self, shapes, includeDots = False):
         self.__initGcode()
         with open(self.gcodePath, 'a') as f:
             for s in shapes:
-                if not includeDots and len(s) == 1:
-                    continue
+                # if not includeDots:
+                #     if len(set([p[0] for p in s])) == 1 and len(set([p[1] for p in s])) == 1:
+                #         continue
                 prevPoint = [float('inf'), float('inf')]
                 for i, point in enumerate(s):
                     if i == 0:
@@ -283,6 +284,43 @@ class ImgPathGenerator:
                 f.write(self.lowerTool + '\n')
                 f.write(self.raiseTool + '\n')
         self.__endGcode()
+
+    def __offsetOutlines(self, outlines, offset):
+        """
+        Offset outlines by offset
+        """
+        pco = pyclipper.PyclipperOffset()
+        scaleFactor = 2 ** 32
+
+        newOutlines = []
+        pco.AddPaths(pyclipper.scale_to_clipper(outlines, scaleFactor), pyclipper.JT_MITER, pyclipper.ET_CLOSEDPOLYGON) # JT_ROUND is EVIL
+        offsetData = pyclipper.scale_from_clipper(pco.Execute(offset * scaleFactor), scaleFactor)
+
+        for o in offsetData:
+            if not compPt(o[0], o[-1]):
+                o.append(o[0])
+
+        newOutlines.append(offsetData)
+
+        pco.Clear()
+
+        return offsetData
+
+
+    def __generateConcentric(self, outlines):
+        """
+        Generate concentric lines to fill outlines solid
+        """
+        concentricOutlines = []
+        while True:
+            outlines = self.__offsetOutlines(outlines, -(3.0*self.toolWidth)/4.0)
+            outlines = np.array(outlines)
+            # outline = self.__cleanOutline(outline)
+            if len(outlines) == 0:
+                break
+            for o in outlines:
+                concentricOutlines.append(o)
+        return np.array(concentricOutlines)
 
     def __generateSpiral(self, spacingFactor = 6.0):
         """
@@ -713,7 +751,7 @@ class ImgPathGenerator:
     def __generateDelaunay(self, lowPoly = False):
         self.__generateDots(mode = 'Delaunay', humanError = True)
 
-    def __generateSquareHalftone(self):
+    def __generateSquareHalftone(self, filledSolid = True):
         """
         Generate field of squares with size corresponding
         to the values of the pixels
@@ -736,22 +774,39 @@ class ImgPathGenerator:
             for j in range(self.image.size[0]):
                 pxBrightness = self.image.getpixel((j if not reverse else self.image.size[0]-1-j, i))
 
-                x, y = (j if not reverse else self.image.size[0]-1-j)*dotSize, i*dotSize
-                x += rez / 2.0
-                y += rez / 2.0
+                if pxBrightness > 250:
+                    continue # don't draw shapes for pixels that are white, or close to white
 
-                deltaCorner = (rez * ((255.0 - float(pxBrightness)) / 255.0) ) / 2.0
+                x, y = (j if not reverse else self.image.size[0]-1-j)*dotSize, i*dotSize
+                x += rez / 1.8
+                y += rez / 1.8
+
+                if reverse:
+                    x += rez / 2.0
+
+                deltaCorner = (rez * ((255.0 - float(pxBrightness)) / 255.0)) / 1.8
 
                 cornerBL = [x - deltaCorner, y - deltaCorner]
                 cornerBR = [x + deltaCorner, y - deltaCorner]
                 cornerTR = [x + deltaCorner, y + deltaCorner]
                 cornerTL = [x - deltaCorner, y + deltaCorner]
                 squares.append([cornerBL, cornerBR, cornerTR, cornerTL, cornerBL])
+
+                if filledSolid:
+                    deltaCorner -= (3.0 * self.toolWidth) / 4.0
+                    while deltaCorner > 0:
+                        cornerBL = [x - deltaCorner, y - deltaCorner]
+                        cornerBR = [x + deltaCorner, y - deltaCorner]
+                        cornerTR = [x + deltaCorner, y + deltaCorner]
+                        cornerTL = [x - deltaCorner, y + deltaCorner]
+                        squares.append([cornerBL, cornerBR, cornerTR, cornerTL, cornerBL])
+                        deltaCorner -= (3.0 * self.toolWidth) / 4.0
+
             reverse = not reverse
 
         self.__drawShapes(squares)
 
-    def __generateCircleHalftone(self):
+    def __generateCircleHalftone(self, filledSolid = True):
         """
         Generate field of circles with size corresponding
         to the values of the pixels
@@ -776,11 +831,17 @@ class ImgPathGenerator:
             for j in range(self.image.size[0]):
                 pxBrightness = self.image.getpixel((j if not reverse else self.image.size[0]-1-j, i))
 
+                if pxBrightness > 250:
+                    continue # don't draw shapes for pixels that are white, or close to white
+
                 x, y = (j if not reverse else self.image.size[0]-1-j)*dotSize, i*dotSize
                 x += rez / 1.8
                 y += rez / 1.8
 
-                radius = (rez * ((255.0 - float(pxBrightness)) / 255.0) ) / 1.8
+                if reverse:
+                    x += rez / 2.0
+
+                radius = (rez * ((255.0 - float(pxBrightness)) / 255.0)) / 1.8
 
                 circle = []
 
@@ -792,11 +853,26 @@ class ImgPathGenerator:
 
                 circles.append(circle)
 
+                if filledSolid:
+                    radius -= (3.0 * self.toolWidth) / 4.0
+                    while radius > 0:
+                        circle = []
+
+                        for k in range(numSegs + 1):
+                            theta = thetaStep * float(k)
+                            xCirc = x + (radius * np.cos(theta))
+                            yCirc = y + (radius * np.sin(theta))
+                            circle.append([xCirc, yCirc])
+
+                        circles.append(circle)
+                        radius -= (3.0 * self.toolWidth) / 4.0
+
             reverse = not reverse
+
 
         self.__drawShapes(circles)
 
-    def __generateCustomHalftone(self):
+    def __generateCustomHalftone(self, filledSolid = True):
         """
         Generate field of custom shapes with size corresponding
         to the values of the pixels
@@ -930,12 +1006,20 @@ class ImgPathGenerator:
             for j in range(self.image.size[0]):
                 pxBrightness = self.image.getpixel((j if not reverse else self.image.size[0]-1-j, i))
 
+                if pxBrightness > 250:
+                    continue # don't draw shapes for pixels that are white, or close to white
+
                 x, y = (j if not reverse else self.image.size[0]-1-j)*dotSize, i*dotSize
-                x += rez / 2.0
-                y += rez / 2.0
+                x += rez / 1.8
+                y += rez / 1.8
+
+                if reverse:
+                    x += rez / 2.0
+
                 patternTrans = np.array([x, y])
 
-                patternSize = (rez * ((255.0 - float(pxBrightness)) / 255.0) )
+                patternSize = ((rez * 1.1) * ((255.0 - float(pxBrightness)) / 255.0))
+                patternCurvesReduced = []
                 for c in patternCurves:
                     # scale the outline to the correct size
                     scaledPattern = (deepcopy(c) * patternSize).tolist()
@@ -958,7 +1042,17 @@ class ImgPathGenerator:
                     for p in patternReduced:
                         p += patternTrans
 
-                    patterns.append(patternReduced)
+
+                    patternCurvesReduced.append(patternReduced)
+
+                for c in patternCurvesReduced:
+                    patterns.append(c)
+
+                if filledSolid:
+                    offsetsyo = self.__generateConcentric(np.array(patternCurvesReduced))
+                    for c in offsetsyo:
+                        patterns.append(c)
+
             reverse = not reverse
 
         self.__drawShapes(patterns)
@@ -1376,8 +1470,10 @@ def main(argv):
         sys.exit()
 
     patherator.configure(speed, 100.0, toolWidth, durationTSP, False)
-    patherator.lowerCommand('M400\nM340 P0 S1500\nG4 P250')
-    patherator.raiseCommand('M400\nM340 P0 S600\nG4 P250')
+    # patherator.lowerCommand('M400\nM340 P0 S1500\nG4 P250')
+    # patherator.raiseCommand('M400\nM340 P0 S600\nG4 P250')
+    patherator.raiseCommand('G1 Z2.0 F300.0')
+    patherator.lowerCommand('G1 Z0.0 F300.0')
     if noNegative:
         patherator.noNegativeCoords()
 
