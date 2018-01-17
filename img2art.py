@@ -284,7 +284,7 @@ class ImgPathGenerator:
                 f.write(self.raiseTool + '\n')
         self.__endGcode()
 
-    def __generateSpiral(self, spacingFactor = 5.0):
+    def __generateSpiral(self, spacingFactor = 6.0):
         """
         Generate points along an Archimedes spiral, with amplitude
         modulated according to the corresponding pixel's value
