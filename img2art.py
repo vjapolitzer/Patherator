@@ -713,7 +713,7 @@ class ImgPathGenerator:
     def __generateDelaunay(self, lowPoly = False):
         self.__generateDots(mode = 'Delaunay', humanError = True)
 
-    def __generateSquares(self):
+    def __generateSquareHalftone(self):
         """
         Generate field of squares with size corresponding
         to the values of the pixels
@@ -751,7 +751,7 @@ class ImgPathGenerator:
 
         self.__drawShapes(squares)
 
-    def __generateCircles(self):
+    def __generateCircleHalftone(self):
         """
         Generate field of circles with size corresponding
         to the values of the pixels
@@ -796,7 +796,7 @@ class ImgPathGenerator:
 
         self.__drawShapes(circles)
 
-    def __generateShapesFromImage(self):
+    def __generateCustomHalftone(self):
         """
         Generate field of custom shapes with size corresponding
         to the values of the pixels
@@ -1245,23 +1245,23 @@ class ImgPathGenerator:
                 return False
             self.__generateDelaunay()
             return True
-        elif self.design == 'squares':
+        elif self.design == 'squareHalftone':
             if not self.__fit(width, height):
                 self.__noFitError()
                 return False
-            self.__generateSquares()
+            self.__generateSquareHalftone()
             return True
-        elif self.design == 'circles':
+        elif self.design == 'circleHalftone':
             if not self.__fit(width, height):
                 self.__noFitError()
                 return False
-            self.__generateCircles()
+            self.__generateCircleHalftone()
             return True
-        elif self.design == 'shapes':
+        elif self.design == 'customHalftone':
             if not self.__fit(width, height):
                 self.__noFitError()
                 return False
-            self.__generateShapesFromImage()
+            self.__generateCustomHalftone()
             return True
         elif self.design == 'RGB':
             if not self.__fit(width, height):
