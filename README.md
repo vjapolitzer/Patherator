@@ -4,7 +4,7 @@
 
 ## Install
 
-Patherator is can currently be run from the command line using Python 2.7. In the future it will have a GUI written in Qt. You will need the following dependencies:
+Patherator can currently be run from the command line using Python 2.7. In the future it will have a GUI written in Qt. You will need the following dependencies:
 numpy, scipy, pillow, pypotrace, pyclipper, skimage
 
 ## Make Your Art
