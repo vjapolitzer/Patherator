@@ -1470,10 +1470,8 @@ def main(argv):
         sys.exit()
 
     patherator.configure(speed, 100.0, toolWidth, durationTSP, False)
-    # patherator.lowerCommand('M400\nM340 P0 S1500\nG4 P250')
-    # patherator.raiseCommand('M400\nM340 P0 S600\nG4 P250')
-    patherator.raiseCommand('G1 Z2.0 F300.0')
-    patherator.lowerCommand('G1 Z0.0 F300.0')
+    patherator.lowerCommand('M400\nM340 P0 S1500\nG4 P250')
+    patherator.raiseCommand('M400\nM340 P0 S600\nG4 P250')
     if noNegative:
         patherator.noNegativeCoords()
 
