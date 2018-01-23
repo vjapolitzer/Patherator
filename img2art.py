@@ -206,7 +206,7 @@ class ImgPathGenerator:
             f.write('; Draw speed: ' + str(self.drawSpeed) + 'mm/s\n')
             f.write('; Travel speed: ' + str(self.travelSpeed) + 'mm/s\n')
             f.write(';\n; Begin GCode\n')
-            f.write('M106 S255\nM400\nM340 P0 S600\nG4 P250\n')
+            f.write('M106 S255\nM400\nM340 P0 S1000\nG4 P250\n')
             f.write('G21\nG90\n') # preparatory gcode
             initialPosition = 'G92 X' + str(self.align[0]) + ' Y' + str(self.align[1])
             if 'Z' in self.lowerTool:
@@ -869,8 +869,208 @@ class ImgPathGenerator:
 
             reverse = not reverse
 
-
         self.__drawShapes(circles)
+
+    def __generateTriangleHalftone(self, filledSolid = True):
+        """
+        Generate field of triangles with size corresponding
+        to the values of the pixels
+        """
+        self.image = self.image.convert('L')
+        self.image = ImageOps.autocontrast(self.image)
+
+        rez = self.toolWidth * 6.0
+        numSegs = 3
+        thetaStep = (2.0 * np.pi) / float(numSegs)
+
+        pxWidth = int(self.imageWidth / rez)
+        pxHeight = int(self.imageHeight / rez)
+        self.image = self.image.resize((pxWidth, pxHeight), Image.ANTIALIAS)
+        self.image = self.image.convert('L')
+
+        triangles = []
+        dotSize = rez
+
+        reverse = False
+        for i in range(self.image.size[1]):
+            for j in range(self.image.size[0]):
+                pxBrightness = self.image.getpixel((j if not reverse else self.image.size[0]-1-j, i))
+
+                if pxBrightness > 250:
+                    continue # don't draw shapes for pixels that are white, or close to white
+
+                x, y = (j if not reverse else self.image.size[0]-1-j)*dotSize, i*dotSize
+                x += rez / 1.8
+                y += rez / 1.8
+
+                if reverse:
+                    x += rez / 2.0
+
+                radius = (rez * ((255.0 - float(pxBrightness)) / 255.0)) / 1.8
+
+                triangle = []
+
+                for k in range(numSegs + 1):
+                    theta = (thetaStep * float(k)) - np.radians(30.0)
+                    xTri = x + (radius * np.cos(theta))
+                    yTri = y + (radius * np.sin(theta))
+                    triangle.append([xTri, yTri])
+
+                triangles.append(triangle)
+
+                if filledSolid:
+                    radius -= (3.0 * self.toolWidth) / 4.0
+                    while radius > 0:
+                        triangle = []
+
+                        for k in range(numSegs + 1):
+                            theta = thetaStep * float(k) - np.radians(30.0)
+                            xTri = x + (radius * np.cos(theta))
+                            yTri = y + (radius * np.sin(theta))
+                            triangle.append([xTri, yTri])
+
+                        triangles.append(triangle)
+                        radius -= (3.0 * self.toolWidth) / 4.0
+
+            reverse = not reverse
+
+        self.__drawShapes(triangles)
+
+    def __generateStarHalftone(self, filledSolid = True):
+        """
+        Generate field of stars with size corresponding
+        to the values of the pixels
+        """
+        self.image = self.image.convert('L')
+        self.image = ImageOps.autocontrast(self.image)
+
+        rez = self.toolWidth * 6.0
+        numSegs = 5
+        thetaStep = (2.0 * np.pi) / float(numSegs)
+
+        pxWidth = int(self.imageWidth / rez)
+        pxHeight = int(self.imageHeight / rez)
+        self.image = self.image.resize((pxWidth, pxHeight), Image.ANTIALIAS)
+        self.image = self.image.convert('L')
+
+        stars = []
+        dotSize = rez
+
+        reverse = False
+        for i in range(self.image.size[1]):
+            for j in range(self.image.size[0]):
+                pxBrightness = self.image.getpixel((j if not reverse else self.image.size[0]-1-j, i))
+
+                if pxBrightness > 250:
+                    continue # don't draw shapes for pixels that are white, or close to white
+
+                x, y = (j if not reverse else self.image.size[0]-1-j)*dotSize, i*dotSize
+                x += rez / 1.8
+                y += rez / 1.8
+
+                if reverse:
+                    x += rez / 2.0
+
+                radius = (rez * ((255.0 - float(pxBrightness)) / 255.0)) / 1.8
+
+                star = []
+
+                for k in range(numSegs + 1):
+                    theta = (thetaStep * float(k)) + np.radians(90.0)
+                    xStar = x + (radius * np.cos(theta))
+                    yStar = y + (radius * np.sin(theta))
+                    star.append([xStar, yStar])
+                    theta += np.radians(36.0)
+                    xStar = x + (0.5 * radius * np.cos(theta))
+                    yStar = y + (0.5 * radius * np.sin(theta))
+                    star.append([xStar, yStar])
+
+                star.append(deepcopy(star[0]))
+
+                stars.append(star)
+
+                if filledSolid:
+                    radius -= (3.0 * self.toolWidth) / 4.0
+                    while radius > 0:
+                        star = []
+
+                        for k in range(numSegs + 1):
+                            theta = (thetaStep * float(k)) + np.radians(90.0)
+                            xStar = x + (radius * np.cos(theta))
+                            yStar = y + (radius * np.sin(theta))
+                            star.append([xStar, yStar])
+                            theta += np.radians(36.0)
+                            xStar = x + (0.5 * radius * np.cos(theta))
+                            yStar = y + (0.5 * radius * np.sin(theta))
+                            star.append([xStar, yStar])
+
+                        star.append(deepcopy(star[0]))
+
+                        stars.append(star)
+                        radius -= (3.0 * self.toolWidth) / 4.0
+
+            reverse = not reverse
+
+        self.__drawShapes(stars)
+
+    def __generateHeartHalftone(self, filledSolid = True):
+        """
+        Generate field of circles with size corresponding
+        to the values of the pixels
+        """
+        self.image = self.image.convert('L')
+        self.image = ImageOps.autocontrast(self.image)
+
+        rez = self.toolWidth * 6.0
+        numSegs = 20
+        thetaStep = (2.0 * np.pi) / float(numSegs)
+
+        pxWidth = int(self.imageWidth / rez)
+        pxHeight = int(self.imageHeight / rez)
+        self.image = self.image.resize((pxWidth, pxHeight), Image.ANTIALIAS)
+        self.image = self.image.convert('L')
+
+        hearts = []
+        dotSize = rez
+
+        reverse = False
+        for i in range(self.image.size[1]):
+            for j in range(self.image.size[0]):
+                pxBrightness = self.image.getpixel((j if not reverse else self.image.size[0]-1-j, i))
+
+                if pxBrightness > 250:
+                    continue # don't draw shapes for pixels that are white, or close to white
+
+                x, y = (j if not reverse else self.image.size[0]-1-j)*dotSize, i*dotSize
+                x += rez / 1.8
+                y += rez / 1.8
+
+                if reverse:
+                    x += rez / 2.0
+
+                radius = (rez * ((255.0 - float(pxBrightness)) / 255.0)) / 1.8
+                radius /= 17.0 # heart max radius ~17
+
+                heart = []
+
+                for k in range(numSegs + 1):
+                    theta = thetaStep * float(k)
+                    xHeart = x + (radius * (16.0 * (np.sin(theta) ** 3)))
+                    yHeart = y + (radius * ((13.0 * np.cos(theta)) - (5.0 * np.cos(2.0 * theta)) - (2.0 * np.cos(3.0 * theta)) - np.cos(4.0 * theta)))
+                    heart.append([xHeart, yHeart])
+
+                # heart.append(deepcopy(heart[0]))
+
+                hearts.append(heart)
+
+                if filledSolid:
+                    offsetsyo = self.__generateConcentric(np.array([heart]))
+                    for c in offsetsyo:
+                        hearts.append(c)
+
+            reverse = not reverse
+
+        self.__drawShapes(hearts)
 
     def __generateCustomHalftone(self, filledSolid = True):
         """
@@ -1351,6 +1551,24 @@ class ImgPathGenerator:
                 return False
             self.__generateCircleHalftone()
             return True
+        elif self.design == 'triangleHalftone':
+            if not self.__fit(width, height):
+                self.__noFitError()
+                return False
+            self.__generateTriangleHalftone()
+            return True
+        elif self.design == 'starHalftone':
+            if not self.__fit(width, height):
+                self.__noFitError()
+                return False
+            self.__generateStarHalftone()
+            return True
+        elif self.design == 'heartHalftone':
+            if not self.__fit(width, height):
+                self.__noFitError()
+                return False
+            self.__generateHeartHalftone()
+            return True
         elif self.design == 'customHalftone':
             if not self.__fit(width, height):
                 self.__noFitError()
@@ -1471,7 +1689,9 @@ def main(argv):
 
     patherator.configure(speed, 100.0, toolWidth, durationTSP, False)
     patherator.lowerCommand('M400\nM340 P0 S1500\nG4 P250')
-    patherator.raiseCommand('M400\nM340 P0 S600\nG4 P250')
+    patherator.raiseCommand('M400\nM340 P0 S1000\nG4 P250')
+    # patherator.lowerCommand('G1 Z0 F300')
+    # patherator.raiseCommand('G1 Z2 F300')
     if noNegative:
         patherator.noNegativeCoords()
 
