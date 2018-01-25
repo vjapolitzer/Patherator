@@ -16,8 +16,20 @@ Example:
   patherator.setGCodePath(gcodePath) # Save path
   patherator.fit(width, height)  # Desired bounding dimensions
   patherator.addImageData(imageData) # Example below for generating data
-  patherator.addTool(tool, toolWidth, perimeters, drawSpeed, travelSpeed,
-                     infillDensity, infillPattern, infillAngle)
+  newTool = ToolConfig()
+  newTool.toolWidth = toolWidth
+  newTool.lowerTool = lowerTool
+  newTool.raiseTool = raiseTool
+  newTool.toolSelect = toolSelect
+  newTool.perimeters = perimeters
+  newTool.drawSpeed = drawSpeed
+  newTool.travelSpeed = travelSpeed
+  newTool.infillDensity = infillDensity
+  newTool.infillPattern = infillPattern
+  newTool.infillAngle = infillAngle
+  newTool.infillOverlap = infillOverlap
+  newTool.patternPath = patternPath
+  patherator.addTool(newTool)
   # Repeat for each imageData/toolConfig pair
   patherator.generate() # Generate GCode and save to file
 
@@ -51,7 +63,7 @@ Tool Configuration Parameters:
   infillPattern: String containing desired pattern
     Currently implemented patterns:
       linear, zigzag, grid, triangle, spiral, golden, sunflower,
-      hilbert, gosper, peano, concentric hexagon, david,
+      hilbert, gosper, peano, concentric, hexagon, david,
       octagramspiral
   infillAngle: Angle of infill pattern in degrees, i.e. 45.0
   infillOverlap: Amount of overlap of infill lines on perimeters,
@@ -1246,7 +1258,7 @@ class ImgPathGenerator:
         else:
             fileNum = 1
             for bmp, toolConfig, lineColor in zip(self.imData, self.toolData, self.lineColorData):
-                print 'Image ' + str(fileNum) + '/' + str(len(self.imData))
+                print 'Part ' + str(fileNum) + '/' + str(len(self.imData))
                 self.setGCodePath(basePath + str(fileNum) + '.gcode')
                 self.__initGcode()
                 self.__insertToolComment(toolConfig)
@@ -1328,17 +1340,18 @@ def main(argv):
 
     for config in configuration[0]:
         configTok = config.split('=')
-        if configTok[0] == 'xMinPlot':
+        configTok[0] = configTok[0].lower()
+        if configTok[0] == 'xminplot':
             xMinPlot = float(configTok[1])
-        elif configTok[0] == 'xMaxPlot':
+        elif configTok[0] == 'xmaxplot':
             xMaxPlot = float(configTok[1])
-        elif configTok[0] == 'yMinPlot':
+        elif configTok[0] == 'yminplot':
             yMinPlot = float(configTok[1])
-        elif configTok[0] == 'yMaxPlot':
+        elif configTok[0] == 'ymaxplot':
             yMaxPlot = float(configTok[1])
-        elif configTok[0].lower() == 'hashome':
+        elif configTok[0] == 'hashome':
             hasHome = True
-        elif configTok[0] == 'travelSpeed':
+        elif configTok[0] == 'travelspeed':
             travelSpeed = float(configTok[1])
         elif configTok[0] == 'preamble':
             preamble = configTok[1].replace('|', '\n')
@@ -1346,11 +1359,12 @@ def main(argv):
     imagePath = configuration[1][0]
     for config in configuration[1][1:]:
         configTok = config.split('=')
-        if configTok[0].lower() == 'width':
+        configTok[0] = configTok[0].lower()
+        if configTok[0] == 'width':
             newWidth = float(configTok[1])*10.0 # convert to mm
-        if configTok[0].lower() == 'height':
+        if configTok[0] == 'height':
             newHeight = float(configTok[1])*10.0 # convert to mm
-        if configTok[0].lower() == 'singlefile':
+        if configTok[0] == 'singlefile':
             singleFile = True
 
     if xMinPlot is None or xMaxPlot is None or yMinPlot is None or yMaxPlot is None:
@@ -1373,47 +1387,48 @@ def main(argv):
             continue
         for config in plotConfig:
             configTok = config.split('=')
-            if configTok[0] == 'toolWidth':
+            configTok[0] = configTok[0].lower()
+            if configTok[0] == 'toolwidth':
                 toolWidth = float(configTok[1])
                 if toolWidth < 0.0:
                     print '\033[91m' + configTok[1] + 'mm is not a valid tool width!' + '\033[0m'
                     sys.exit()
-            elif configTok[0] == 'lowerCommand':
+            elif configTok[0] == 'lowercommand':
                 lowerTool = configTok[1].replace('|', '\n')
-            elif configTok[0] == 'raiseCommand':
+            elif configTok[0] == 'raisecommand':
                 raiseTool = configTok[1].replace('|', '\n')
-            elif configTok[0] == 'toolSelect':
+            elif configTok[0] == 'toolselect':
                 toolSelect = configTok[1].replace('|', '\n')
             elif configTok[0] == 'perimeters':
                 perimeters = int(configTok[1])
                 if perimeters < 0:
                     print '\033[91m' + configTok[1] + ' is not a valid number of perimeters!' + '\033[0m'
                     sys.exit()
-            elif configTok[0] == 'drawSpeed':
+            elif configTok[0] == 'drawspeed':
                 drawSpeed = float(configTok[1])
                 if drawSpeed < 0.0:
                     print '\033[91m' + configTok[1] + 'mm/s is not a valid drawSpeed!' + '\033[0m'
                     sys.exit()
-            elif configTok[0] == 'travelSpeed':
+            elif configTok[0] == 'travelspeed':
                 travelSpeed = float(configTok[1])
                 if travelSpeed < 0.0:
                     print '\033[91m' + configTok[1] + 'mm/s is not a valid travelSpeed!' + '\033[0m'
                     sys.exit()
-            elif configTok[0] == 'infillDensity':
+            elif configTok[0] == 'infilldensity':
                 infillDensity = float(configTok[1])
                 if infillDensity < 0.0 or infillDensity > 100.0:
                     print '\033[91m' + configTok[1] + '% is not a valid density!' + '\033[0m'
                     sys.exit()
-            elif configTok[0] == 'infillPattern':
+            elif configTok[0] == 'infillpattern':
                 infillPattern = configTok[1].lower()
                 if not infillPattern in ('linear', 'zigzag', 'grid', 'triangle', 'spiral', 'golden',
                                          'sunflower', 'hilbert', 'gosper', 'peano', 'sierpinski',
                                          'concentric',  'hexagon', 'octagramspiral', 'david', 'shapefill'):
                     print '\033[91m' + infillPattern + ' is not a valid infill type!' + '\033[0m'
                     sys.exit()
-            elif configTok[0] == 'infillAngle':
+            elif configTok[0] == 'infillangle':
                 infillAngle = float(configTok[1])
-            elif configTok[0] == 'infillOverlap':
+            elif configTok[0] == 'infilloverlap':
                 infillOverlap = float(configTok[1])
                 if infillOverlap < 0.0 or infillOverlap > 100.0:
                     print '\033[91m' + infillOverlap + '% is not a valid overlap!' + '\033[0m'
