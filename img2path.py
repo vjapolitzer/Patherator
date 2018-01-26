@@ -9,8 +9,8 @@ Dependencies: numpy, scipy, pillow, pypotrace, pyclipper, skimage
 Example:
   plotBounds = (xMinPlot, xMaxPlot
                 yMinPlot, yMaxPlot) # area reachable by all tools used
-  patherator = ImgPathGenerator(plotBounds)
-  patherator.configure(hasHome = False, travelSpeed = 100.0)
+  patherator = ImgPathGenerator()
+  patherator.configure(plotBounds = plotBounds, hasHome = False)
   patherator.lowerCommand('Z') # Z for configured Z-Hop moves, o/w any GCode
   patherator.raiseCommand('Z') # Z for configured Z-Hop moves, o/w any GCode
   patherator.setGCodePath(gcodePath) # Save path
@@ -129,11 +129,11 @@ class ToolConfig:
         self.patternPath = None
 
 class ImgPathGenerator:
-    def __init__(self, plotBounds):
-        self.xMinPlot = plotBounds[0]
-        self.xMaxPlot = plotBounds[1]
-        self.yMinPlot = plotBounds[2]
-        self.yMaxPlot = plotBounds[3]
+    def __init__(self):
+        self.xMinPlot = 0.0
+        self.xMaxPlot = 0.0
+        self.yMinPlot = 0.0
+        self.yMaxPlot = 0.0
         self.startPoint = np.array([0.0, 0.0])
         self.hasHome = False
         self.travelSpeed = None
@@ -1209,9 +1209,12 @@ class ImgPathGenerator:
             self.__generatePath(bmp, toolConfig, generatePreview, lineColor)
             segmentIndex += 1
 
-    def configure(self, hasHome, travelSpeed, preamble = None):
+    def configure(self, plotBounds, hasHome, preamble = None):
+        self.xMinPlot = plotBounds[0]
+        self.xMaxPlot = plotBounds[1]
+        self.yMinPlot = plotBounds[2]
+        self.yMaxPlot = plotBounds[3]
         self.hasHome = hasHome
-        self.travelSpeed = travelSpeed
         self.preamble = preamble
 
     def setGCodePath(self, path):
@@ -1241,6 +1244,8 @@ class ImgPathGenerator:
         """
         Store tool configuration object with given parameters
         """
+        if tool.travelSpeed > self.travelSpeed:
+            self.travelSpeed = tool.travelSpeed
         self.toolData.append(tool)
 
     def numTools(self):
@@ -1351,8 +1356,6 @@ def main(argv):
             yMaxPlot = float(configTok[1])
         elif configTok[0] == 'hashome':
             hasHome = True
-        elif configTok[0] == 'travelspeed':
-            travelSpeed = float(configTok[1])
         elif configTok[0] == 'preamble':
             preamble = configTok[1].replace('|', '\n')
 
@@ -1374,9 +1377,8 @@ def main(argv):
     print '\nOriginal image: ' + basename(imagePath)
 
     plotBounds = (xMinPlot, xMaxPlot, yMinPlot, yMaxPlot)
-    patherator = ImgPathGenerator(plotBounds)
-
-    patherator.configure(hasHome = hasHome, travelSpeed = travelSpeed, preamble = preamble)
+    patherator = ImgPathGenerator()
+    patherator.configure(plotBounds = plotBounds, hasHome = hasHome, preamble = preamble)
 
     patherator.setImagePath(imagePath)
     patherator.setGCodePath(gcodePath)
@@ -1433,7 +1435,7 @@ def main(argv):
                 if infillOverlap < 0.0 or infillOverlap > 100.0:
                     print '\033[91m' + infillOverlap + '% is not a valid overlap!' + '\033[0m'
                     sys.exit()
-            elif configTok[0] == 'patternPath':
+            elif configTok[0] == 'patternpath':
                 patternPath = configTok[1]
             else:
                 print '\033[91m' + 'Unknown parameter: ' + config + '\033[0m'

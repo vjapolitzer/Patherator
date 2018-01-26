@@ -1,10 +1,10 @@
 ;patherator im2path input file
-;1st line is machine config: xMinPlot=0.0,xMaxPlot=150.0,yMinPlot=0.0,yMaxPlot=150.0,hasHome,travelSpeed=100.0,preamble=optional|Preamble|GCode
+;1st line is machine config: xMinPlot=0.0,xMaxPlot=150.0,yMinPlot=0.0,yMaxPlot=150.0,hasHome,preamble=optional|Preamble|GCode
 ;2nd line is path/to/image, bounding dimensions for the desired plot output: 'path/to/image',width=10.0,height=10.0
 ;3rd and beyond: toolConfig
 ;toolConfig ex: toolWidth=0.5,lowerCommand=M400|M340 P0 S1500|G4 P250,raiseCommand=M400|M340 P0 S600|G4 P250,perimeters=0,drawSpeed=25.0,travelSpeed=100.0,infillDensity=50.0,infillPattern=linear,infillAngle=45.0,infillOverlap=50.0
 
-xMinPlot=75.0,xMaxPlot=225.0,yMinPlot=37.0,yMaxPlot=143.0,hasHome,travelSpeed=100.0
+xMinPlot=75.0,xMaxPlot=225.0,yMinPlot=37.0,yMaxPlot=143.0,preamble=M106 S255|M400|M340 P0 S1000|G4 P250
 '/home/user/Pictures/doge.jpg',width=6.0,height=9.0
 toolWidth=0.35,lowerCommand=M400|M340 P0 S1500|G4 P250,raiseCommand=M400|M340 P0 S600|G4 P250 D0,perimeters=0,drawSpeed=30.0,travelSpeed=100.0,infillDensity=50.0,infillPattern=gosper,infillAngle=45.0,infillOverlap=50.0
 toolWidth=0.35,lowerCommand=M400|M340 P0 S1500|G4 P250,raiseCommand=M400|M340 P0 S600|G4 P250 D0,perimeters=1,drawSpeed=30.0,travelSpeed=100.0,infillDensity=100.0,infillPattern=linear,infillAngle=0.0,infillOverlap=50.0
