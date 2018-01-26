@@ -1446,6 +1446,8 @@ def main(argv):
         if infillPattern == 'shapefill' and patternPath is None:
             print '\033[91m' + 'Path to pattern image not provided!' + '\033[0m'
             sys.exit()
+        if infillPattern != 'shapefill' and patternPath is not None:
+            print '\n' + '\033[93m' + 'Selected fill pattern is ' + infillPattern + ', supplied pattern image will not be used!' + '\033[0m'
 
         newTool = ToolConfig()
         newTool.toolWidth = toolWidth
