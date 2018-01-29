@@ -149,6 +149,7 @@ class ImgPathGenerator:
         self.lineColorData = []
         self.toolData = []
         self.preamble = None
+        self.postamble = None
         self.previewData = None
 
     def __transOrigin(self, point):
@@ -1060,6 +1061,8 @@ class ImgPathGenerator:
         Append GCode file with ending gcode
         """
         with open(self.gcodePath, 'a') as f:
+            if self.postamble is not None:
+                f.write(self.postamble + '\n')
             if self.hasHome and lastFile:
                 f.write('M400\nG28 X Y\n')
             elif lastFile:
@@ -1209,13 +1212,14 @@ class ImgPathGenerator:
             self.__generatePath(bmp, toolConfig, generatePreview, lineColor)
             segmentIndex += 1
 
-    def configure(self, plotBounds, hasHome, preamble = None):
+    def configure(self, plotBounds, hasHome, preamble = None, postamble = None):
         self.xMinPlot = plotBounds[0]
         self.xMaxPlot = plotBounds[1]
         self.yMinPlot = plotBounds[2]
         self.yMaxPlot = plotBounds[3]
         self.hasHome = hasHome
         self.preamble = preamble
+        self.postamble = postamble
 
     def setGCodePath(self, path):
         self.gcodePath = path
@@ -1309,7 +1313,7 @@ def main(argv):
 
     hasHome = False
     xMinPlot, xMaxplot, yMinPlot, yMaxPlot = None, None, None, None
-    preamble = None
+    preamble, postamble = None, None
     lowerTool, raiseTool, toolSelect = None, None, None
 
     preview = False
@@ -1358,6 +1362,8 @@ def main(argv):
             hasHome = True
         elif configTok[0] == 'preamble':
             preamble = configTok[1].replace('|', '\n')
+        elif configTok[0] == 'postamble':
+            postamble = configTok[1].replace('|', '\n')
 
     imagePath = configuration[1][0]
     for config in configuration[1][1:]:
@@ -1378,7 +1384,8 @@ def main(argv):
 
     plotBounds = (xMinPlot, xMaxPlot, yMinPlot, yMaxPlot)
     patherator = ImgPathGenerator()
-    patherator.configure(plotBounds = plotBounds, hasHome = hasHome, preamble = preamble)
+    patherator.configure(plotBounds = plotBounds, hasHome = hasHome,
+                         preamble = preamble, postamble = postamble)
 
     patherator.setImagePath(imagePath)
     patherator.setGCodePath(gcodePath)
