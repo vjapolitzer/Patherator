@@ -1335,8 +1335,6 @@ def main(argv):
         print'\033[91m' + 'Please select an input file with -i <input.csv>' + '\033[0m'
         sys.exit()
 
-    gcodePath = splitext(basename(csvPath))[0] + '.gcode'
-
     print 'Reading ' + basename(csvPath)
 
     with open(csvPath, 'rb') as configFile:
@@ -1366,6 +1364,7 @@ def main(argv):
             postamble = configTok[1].replace('|', '\n')
 
     imagePath = configuration[1][0]
+    gcodePath = splitext(imagePath)[0] + '.gcode'
     for config in configuration[1][1:]:
         configTok = config.split('=')
         configTok[0] = configTok[0].lower()
