@@ -1674,7 +1674,7 @@ def main(argv):
 
     patherator.loadImage(imagePath)
     patherator.setImagePath(imagePath)
-    gcodePath = splitext(basename(imagePath))[0] + '.gcode'
+    gcodePath = splitext(imagePath)[0] + '.gcode'
     patherator.setGCodePath(gcodePath)
 
     if patternPath != None:
