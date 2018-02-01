@@ -4,7 +4,7 @@
 Image2Path
 @author: Vincent Politzer <https://github.com/vjapolitzer>
 
-Dependencies: numpy, scipy, pillow, pypotrace, pyclipper, skimage
+Dependencies: numpy, scipy, pillow, pypotrace, pyclipper, skimage, sklearn
 
 Example:
   plotBounds = (xMinPlot, xMaxPlot
@@ -85,6 +85,8 @@ from skimage import img_as_float
 from skimage.restoration import denoise_bilateral
 from skimage.draw import line_aa as drawLine
 import skimage.morphology as skmorph
+from sklearn.cluster import KMeans
+from sklearn import metrics
 
 def mapToRange(val, srcMax, dst):
     """
@@ -1287,13 +1289,69 @@ class ImgPathGenerator:
                 newname = basePath + "_preview.png"
                 previewIm.save(newname)
 
+def getNumColors(path):
+    """
+    Detect the number of colors in the supplied image
+    (Only up to 8 colors not including the background)
+    NOTE: This feature is experimental and may not work
+    well for ALL images
+    """
+    im = Image.open(path)
+
+    # Resize to reduce processing time
+    w, h = im.size
+    wSmall = int(66 * w / max(w, h))
+    hSmall = int(66 * h / max(w, h))
+    im = im.resize((wSmall, hSmall))
+
+    # Convert into numpy data structure
+    im = im.convert('RGB')
+    im = np.array(im)
+
+    # Filter to remove non-unique colors
+    # This sequence of filters was experimentally determined
+    # And may not work well for ALL images
+    for i in range(10):
+        im = denoise_bilateral(im, sigma_color=0.025, sigma_spatial=4, multichannel = True)
+    for i in range(5):
+        im = denoise_bilateral(im, sigma_color=0.035, sigma_spatial=4, multichannel = True)
+    for i in range(3):
+        im = denoise_bilateral(im, sigma_color=0.05, sigma_spatial=4, multichannel = True)
+    for i in range(2):
+        im = denoise_bilateral(im, sigma_color=0.06, sigma_spatial=4, multichannel = True)
+
+    # skio.imshow(im)
+    # skio.show()
+    # return
+
+    # Reshape into a list of pixels
+    imArray = im.reshape((im.shape[0] * im.shape[1], 3))
+
+    bestSilhouette = -1
+    bestNumClusters = 0
+    for numClusters in range(2,9):
+        # Cluster the colors
+        clt = KMeans(n_clusters = numClusters)
+        clt.fit(imArray)
+
+        # Calculate Silhouette Coefficient
+        silhouette = metrics.silhouette_score(imArray, clt.labels_, metric = 'euclidean')
+
+        # Find the best one
+        if silhouette > bestSilhouette:
+            bestSilhouette = silhouette
+            bestNumClusters = numClusters
+
+    print bestNumClusters - 1 # Subtract one: background color is not included
+
 def usage():
     print 'To convert to gcode:'
     print '-i <path/to/config.csv>'
     print 'See example.csv for example config'
 
 def main(argv):
-    opts, args = getopt.getopt(argv, 'hspi:', ['help', 'savePreview', 'preview', 'input='])
+    opts, args = getopt.getopt(argv, 'hspi:c:n:', ['help', 'savePreview', 'preview', 'input=',
+                                                   'colorDetect', 'numColors'])
     csvPath = None
     imagePath = None
     gcodePath = None
@@ -1330,6 +1388,9 @@ def main(argv):
             savePreview = True
         elif opt in ('-p', '--preview'):
             preview = True
+        elif opt in ('-c', '--colorDetect'):
+            getNumColors(arg)
+            return
 
     if csvPath == None:
         print'\033[91m' + 'Please select an input file with -i <input.csv>' + '\033[0m'
@@ -1574,9 +1635,10 @@ def main(argv):
     else:
         print '\n' + '\033[93m' + 'Align tool to bottom left of plot before running!' + '\033[0m'
 
+    print '\033[94m' + '\nTool path generated successfully in:' + '\033[0m'
+
 if __name__ == "__main__":
     startTime = time.time()
     main(sys.argv[1:])
     endTime = time.time()
-    print '\033[94m' + '\nTool path generated successfully in:'
-    print format((endTime - startTime), '.2f') + ' seconds' + '\033[0m'
+    print '\033[94m' + format((endTime - startTime), '.2f') + ' seconds' + '\033[0m'
