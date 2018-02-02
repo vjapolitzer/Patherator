@@ -104,6 +104,10 @@ def floatRange(start, stop, step):
         i += step
 
 def compPt(p0, p1):
+    """
+    Returns True if 2-dim points p0 and p1
+    are equal. Otherwise, returns False.
+    """
     return p0[0] == p1[0] and p0[1] == p1[1]
 
 def distance(p0, p1):
@@ -111,6 +115,105 @@ def distance(p0, p1):
     Distance between p0 and p1
     """
     return math.sqrt((p0[0] - p1[0]) ** 2 + (p0[1] - p1[1]) ** 2)
+
+def getBackgroundColor(im):
+    """
+    Detect the background color of an image.
+    The color is assumed to be the the most common
+    pixel color along the border of the image.
+    """
+    borderPixels = []
+    borderColors = []
+    for x in range(im.size[0]):
+        # Get pixel along top
+        px = im.getpixel((x, 0))[:3]
+        borderPixels.append(px)
+        if px not in borderColors:
+            borderColors.append(px)
+
+        # Get pixel along bottom
+        px = im.getpixel((x, im.size[1] - 1))[:3]
+        borderPixels.append(px)
+        if px not in borderColors:
+            borderColors.append(px)
+
+    for y in range(1, im.size[1] - 1):
+        # Get pixel along left
+        px = im.getpixel((1, y))[:3]
+        borderPixels.append(px)
+        if px not in borderColors:
+            borderColors.append(px)
+
+        # Get pixel along right
+        px = im.getpixel((im.size[0] - 1 - 1, y))[:3]
+        borderPixels.append(px)
+        if px not in borderColors:
+            borderColors.append(px)
+
+    mostOccurrences = 0
+    mostCommonColor = None
+    for color in borderColors:
+        numOccurrences = borderPixels.count(color)
+        if numOccurrences > mostOccurrences:
+            mostOccurrences = numOccurrences
+            mostCommonColor = color
+
+    return mostCommonColor # RGB value tuple for background color
+
+def getNumColors(path):
+    """
+    Detect the number of colors in the supplied image
+    (Only up to 8 colors not including the background)
+    NOTE: This feature is experimental and may not work
+    well for ALL images
+    """
+    im = Image.open(path)
+
+    # Resize to reduce processing time
+    w, h = im.size
+    wSmall = int(66 * w / max(w, h))
+    hSmall = int(66 * h / max(w, h))
+    im = im.resize((wSmall, hSmall))
+
+    # Convert into numpy data structure
+    im = im.convert('RGB')
+    im = np.array(im)
+
+    # Filter to remove non-unique colors
+    # This sequence of filters was experimentally determined
+    # And may not work well for ALL images
+    for i in range(10):
+        im = denoise_bilateral(im, sigma_color=0.025, sigma_spatial=4, multichannel = True)
+    for i in range(5):
+        im = denoise_bilateral(im, sigma_color=0.035, sigma_spatial=4, multichannel = True)
+    for i in range(3):
+        im = denoise_bilateral(im, sigma_color=0.05, sigma_spatial=4, multichannel = True)
+    for i in range(2):
+        im = denoise_bilateral(im, sigma_color=0.06, sigma_spatial=4, multichannel = True)
+
+    # skio.imshow(im)
+    # skio.show()
+    # return
+
+    # Reshape into a list of pixels
+    imArray = im.reshape((im.shape[0] * im.shape[1], 3))
+
+    bestSilhouette = -1
+    bestNumClusters = 0
+    for numClusters in range(2,9):
+        # Cluster the colors
+        clt = KMeans(n_clusters = numClusters)
+        clt.fit(imArray)
+
+        # Calculate Silhouette Coefficient
+        silhouette = metrics.silhouette_score(imArray, clt.labels_, metric = 'euclidean')
+
+        # Find the best one
+        if silhouette > bestSilhouette:
+            bestSilhouette = silhouette
+            bestNumClusters = numClusters
+
+    return bestNumClusters - 1 # Subtract one: background color is not included
 
 class ToolConfig:
     """
@@ -517,13 +620,11 @@ class ImgPathGenerator:
         # newname = name[0] + "_adapt.jpg"
         # pattern.convert('RGB').save(newname)
 
-        # for manual input can use ginput to select point which is background color
-        # can even select multiple points for background area until user is finished
-        background_color = pattern.getpixel((0,0))[:3] # RGB value tuple for background color
+        backgroundColor = backgroundColor = getBackgroundColor(im)
 
         count = 0
         for numpixels, color in patternColors:
-            if color != background_color:
+            if color != backgroundColor:
 
                 color_area = (red == color[0]) & (green == color[1]) & (blue == color[2]) # T/F Matrix of color location
 
@@ -1289,61 +1390,6 @@ class ImgPathGenerator:
                 newname = basePath + "_preview.png"
                 previewIm.save(newname)
 
-def getNumColors(path):
-    """
-    Detect the number of colors in the supplied image
-    (Only up to 8 colors not including the background)
-    NOTE: This feature is experimental and may not work
-    well for ALL images
-    """
-    im = Image.open(path)
-
-    # Resize to reduce processing time
-    w, h = im.size
-    wSmall = int(66 * w / max(w, h))
-    hSmall = int(66 * h / max(w, h))
-    im = im.resize((wSmall, hSmall))
-
-    # Convert into numpy data structure
-    im = im.convert('RGB')
-    im = np.array(im)
-
-    # Filter to remove non-unique colors
-    # This sequence of filters was experimentally determined
-    # And may not work well for ALL images
-    for i in range(10):
-        im = denoise_bilateral(im, sigma_color=0.025, sigma_spatial=4, multichannel = True)
-    for i in range(5):
-        im = denoise_bilateral(im, sigma_color=0.035, sigma_spatial=4, multichannel = True)
-    for i in range(3):
-        im = denoise_bilateral(im, sigma_color=0.05, sigma_spatial=4, multichannel = True)
-    for i in range(2):
-        im = denoise_bilateral(im, sigma_color=0.06, sigma_spatial=4, multichannel = True)
-
-    # skio.imshow(im)
-    # skio.show()
-    # return
-
-    # Reshape into a list of pixels
-    imArray = im.reshape((im.shape[0] * im.shape[1], 3))
-
-    bestSilhouette = -1
-    bestNumClusters = 0
-    for numClusters in range(2,9):
-        # Cluster the colors
-        clt = KMeans(n_clusters = numClusters)
-        clt.fit(imArray)
-
-        # Calculate Silhouette Coefficient
-        silhouette = metrics.silhouette_score(imArray, clt.labels_, metric = 'euclidean')
-
-        # Find the best one
-        if silhouette > bestSilhouette:
-            bestSilhouette = silhouette
-            bestNumClusters = numClusters
-
-    print bestNumClusters - 1 # Subtract one: background color is not included
-
 def usage():
     print 'To convert to gcode:'
     print '-i <path/to/config.csv>'
@@ -1389,7 +1435,7 @@ def main(argv):
         elif opt in ('-p', '--preview'):
             preview = True
         elif opt in ('-c', '--colorDetect'):
-            getNumColors(arg)
+            print getNumColors(arg)
             return
 
     if csvPath == None:
@@ -1589,20 +1635,18 @@ def main(argv):
     # newname = name[0] + "_adapt.jpg"
     # im.convert('RGB').save(newname)
 
-    # for manual input can use ginput to select point which is background color
-    # can even select multiple points for background area until user is finished
-    background_color = im.getpixel((0,0))[:3] # RGB value tuple for background color
+    width, height = im.size
+
+    backgroundColor = getBackgroundColor(im)
 
     count = 0
     for numpixels, color in im_colors:
-        if color != background_color:
+        if color != backgroundColor:
 
             color_area = (red == color[0]) & (green == color[1]) & (blue == color[2]) # T/F Matrix of color location
 
             indices = np.where(color_area == True)
             coordinates = zip(indices[0], indices[1]) # stored col,row
-
-            width, height = im.size
 
             mask = np.zeros((width, height))
 
