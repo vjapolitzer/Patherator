@@ -23,7 +23,6 @@ Example:
   newTool.toolSelect = toolSelect
   newTool.perimeters = perimeters
   newTool.drawSpeed = drawSpeed
-  newTool.travelSpeed = travelSpeed
   newTool.infillDensity = infillDensity
   newTool.infillPattern = infillPattern
   newTool.infillAngle = infillAngle
@@ -39,7 +38,7 @@ ImgPathGenerator Configuration Parameters:
   yMinPlot: Minimum y-axis toolhead position in mm, i.e. 0.0
   yMaxPlot: Maximum y-axis toolhead position in mm, i.e. 200.0
   hasHome: whether to home before and after, or just align bottom left before
-  travelSpeed: travel speed for the plotter
+  travelSpeed: Speed for non-draw moves in mm/s, i.e. 100.0
 
 Example of imageData generation off of loaded Image:
   im = Image.open(imagePath)
@@ -56,7 +55,6 @@ Tool Configuration Parameters:
   toolWidth: Tool line width in mm, i.e. 0.5
   perimeters: Number of perimeters/outlines to be drawn, i.e. 1
   drawSpeed: Speed for draw moves in mm/s, i.e. 25.0
-  travelSpeed: Speed for non-draw moves in mm/s, i.e. 100.0
   infillDensity: Density of fill lines, in %, i.e. 100.0
     50.0 means infill lines separated by toolWidth
     100.0 means infill lines touching
@@ -64,7 +62,7 @@ Tool Configuration Parameters:
     Currently implemented patterns:
       linear, zigzag, grid, triangle, spiral, golden, sunflower,
       hilbert, gosper, peano, concentric, hexagon, david,
-      octagramspiral
+      octagramspiral, sierpinski, shapefill
   infillAngle: Angle of infill pattern in degrees, i.e. 45.0
   infillOverlap: Amount of overlap of infill lines on perimeters,
                  expressed in percent of the toolWidth
@@ -223,7 +221,6 @@ class ToolConfig:
         self.toolWidth = None
         self.perimeters = None
         self.drawSpeed = None
-        self.travelSpeed = None
         self.infillDensity = None
         self.infillPattern = None
         self.infillAngle = None
@@ -306,33 +303,31 @@ class ImgPathGenerator:
         if compPt(loop[0], loop[-1]):
             loop.pop()
 
+    def __tesselateAndScale(self, curve):
+        """
+        Translate vector curves into points in the plotting space
+        """
+        outline = []
+        prevPoint = [-1.0, -1.0]
+        for point in curve.tesselate():
+            scaledPoint = [mapToRange(point[1], self.xPx, self.xRange), mapToRange(point[0], self.yPx, self.yRange)]
+            if prevPoint[0] != scaledPoint[0] or prevPoint[1] != scaledPoint[1]: # filter duplicates
+                outline.append(scaledPoint)
+            prevPoint = scaledPoint
+        self.__fixLoop(outline)
+        return outline
+
     def __splitIntoIslands(self, parentCurve, islands):
         """
         Group outlines together into islands (independent outer outlines + enclosed child shapes),
         resize the image, and center it on the bed
         """
         island = []
-        outline = []
-        prevPoint = [-1.0, -1.0]
-        for point in parentCurve.tesselate():
-            scaledPoint = [mapToRange(point[1], self.xPx, self.xRange), mapToRange(point[0], self.yPx, self.yRange)]
-            if prevPoint[0] != scaledPoint[0] or prevPoint[1] != scaledPoint[1]: # filter duplicates
-                outline.append(scaledPoint)
-            prevPoint = scaledPoint
-        self.__fixLoop(outline)
-        island.append(outline)
+        island.append(self.__tesselateAndScale(parentCurve))
         for child in parentCurve.children:
-            outline = []
-            prevPoint = [-1.0, -1.0]
-            for point in child.tesselate():
-                scaledPoint = [mapToRange(point[1], self.xPx, self.xRange), mapToRange(point[0], self.yPx, self.yRange)]
-                if prevPoint[0] != scaledPoint[0] or prevPoint[1] != scaledPoint[1]: # filter duplicates
-                    outline.append(scaledPoint)
-                prevPoint = scaledPoint
-            self.__fixLoop(outline)
-            island.append(outline)
-            for baby in child.children:
-                self.__splitIntoIslands(baby, islands)
+            island.append(self.__tesselateAndScale(child))
+            for subChild in child.children:
+                self.__splitIntoIslands(subChild, islands)
         islands.append(island)
 
     def __generateConcentric(self, islands, spacing, toolConfig):
@@ -620,7 +615,7 @@ class ImgPathGenerator:
         # newname = name[0] + "_adapt.jpg"
         # pattern.convert('RGB').save(newname)
 
-        backgroundColor = getBackgroundColor(im)
+        backgroundColor = getBackgroundColor(pattern)
 
         count = 0
         for numpixels, color in patternColors:
@@ -1190,7 +1185,7 @@ class ImgPathGenerator:
                 f.write('; Infill angle: ' + str(toolConfig.infillAngle) + 'degrees\n')
                 f.write('; Infill overlap: ' + str(toolConfig.infillOverlap) + '%\n')
             f.write('; Draw speed: ' + str(toolConfig.drawSpeed) + 'mm/s\n')
-            f.write('; Travel speed: ' + str(toolConfig.travelSpeed) + 'mm/s\n;\n')
+            f.write('; Travel speed: ' + str(self.travelSpeed) + 'mm/s\n;\n')
 
     def __insertAllToolComments(self):
         """
@@ -1274,7 +1269,7 @@ class ImgPathGenerator:
                         if j == 0:
                             f.write(toolConfig.raiseTool + '\n')
                             f.write('G0 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f')
-                                    + ' F' + str(toolConfig.travelSpeed*60.0) +'\n')
+                                    + ' F' + str(self.travelSpeed*60.0) +'\n')
                             f.write(toolConfig.lowerTool + '\n')
                         else:
                             f.write('G1 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f')
@@ -1293,7 +1288,7 @@ class ImgPathGenerator:
                                     continue # previous was same position, already in position
                                 f.write(toolConfig.raiseTool + '\n')
                                 f.write('G0 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f')
-                                        + ' F' + str(toolConfig.travelSpeed*60.0) +'\n')
+                                        + ' F' + str(self.travelSpeed*60.0) +'\n')
                                 f.write(toolConfig.lowerTool + '\n')
                             else:
                                 f.write('G1 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f')
@@ -1315,14 +1310,15 @@ class ImgPathGenerator:
             self.__generatePath(bmp, toolConfig, generatePreview, lineColor)
             segmentIndex += 1
 
-    def configure(self, plotBounds, hasHome, preamble = None, postamble = None):
+    def configure(self, plotBounds, travelSpeed, preamble = None, postamble = None, hasHome = False):
         self.xMinPlot = plotBounds[0]
         self.xMaxPlot = plotBounds[1]
         self.yMinPlot = plotBounds[2]
         self.yMaxPlot = plotBounds[3]
-        self.hasHome = hasHome
+        self.travelSpeed = travelSpeed
         self.preamble = preamble
         self.postamble = postamble
+        self.hasHome = hasHome
 
     def setGCodePath(self, path):
         self.gcodePath = path
@@ -1351,8 +1347,6 @@ class ImgPathGenerator:
         """
         Store tool configuration object with given parameters
         """
-        if tool.travelSpeed > self.travelSpeed:
-            self.travelSpeed = tool.travelSpeed
         self.toolData.append(tool)
 
     def numTools(self):
@@ -1469,6 +1463,11 @@ def main(argv):
             preamble = configTok[1].replace('|', '\n')
         elif configTok[0] == 'postamble':
             postamble = configTok[1].replace('|', '\n')
+        elif configTok[0] == 'travelspeed':
+            travelSpeed = float(configTok[1])
+            if travelSpeed < 0.0:
+                print '\033[91m' + configTok[1] + 'mm/s is not a valid travelSpeed!' + '\033[0m'
+                sys.exit()
 
     imagePath = configuration[1][0]
     gcodePath = splitext(imagePath)[0] + '.gcode'
@@ -1490,8 +1489,9 @@ def main(argv):
 
     plotBounds = (xMinPlot, xMaxPlot, yMinPlot, yMaxPlot)
     patherator = ImgPathGenerator()
-    patherator.configure(plotBounds = plotBounds, hasHome = hasHome,
-                         preamble = preamble, postamble = postamble)
+    patherator.configure(plotBounds = plotBounds, travelSpeed = travelSpeed,
+                         preamble = preamble, postamble = postamble,
+                         hasHome = hasHome,)
 
     patherator.setImagePath(imagePath)
     patherator.setGCodePath(gcodePath)
@@ -1523,11 +1523,6 @@ def main(argv):
                 drawSpeed = float(configTok[1])
                 if drawSpeed < 0.0:
                     print '\033[91m' + configTok[1] + 'mm/s is not a valid drawSpeed!' + '\033[0m'
-                    sys.exit()
-            elif configTok[0] == 'travelspeed':
-                travelSpeed = float(configTok[1])
-                if travelSpeed < 0.0:
-                    print '\033[91m' + configTok[1] + 'mm/s is not a valid travelSpeed!' + '\033[0m'
                     sys.exit()
             elif configTok[0] == 'infilldensity':
                 infillDensity = float(configTok[1])
@@ -1569,7 +1564,6 @@ def main(argv):
         newTool.toolSelect = toolSelect
         newTool.perimeters = perimeters
         newTool.drawSpeed = drawSpeed
-        newTool.travelSpeed = travelSpeed
         newTool.infillDensity = infillDensity
         newTool.infillPattern = infillPattern
         newTool.infillAngle = infillAngle
