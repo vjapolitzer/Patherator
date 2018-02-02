@@ -620,7 +620,7 @@ class ImgPathGenerator:
         # newname = name[0] + "_adapt.jpg"
         # pattern.convert('RGB').save(newname)
 
-        backgroundColor = backgroundColor = getBackgroundColor(im)
+        backgroundColor = getBackgroundColor(im)
 
         count = 0
         for numpixels, color in patternColors:
