@@ -158,6 +158,28 @@ def getBackgroundColor(im):
 
     return mostCommonColor # RGB value tuple for background color
 
+def filterLoRez(im, desiredNumColors):
+    """
+    Filter low resolution images to reduce compression
+    and anti-alias artifacts
+    """
+    im = im.convert('P', palette = Image.ADAPTIVE, colors = int(desiredNumColors+1))
+    im = im.convert('RGB')
+    im = np.array(im)
+
+    for i in range(10):
+        im = denoise_bilateral(im, sigma_color=0.088, sigma_spatial=0.5, multichannel = True)
+    for i in range(13):
+        im = denoise_bilateral(im, sigma_color=0.030, sigma_spatial=1.0, multichannel = True)
+
+    # skio.imshow(im)
+    # skio.show()
+    # return
+
+    im = Image.fromarray((im * 255).astype(np.uint8))
+
+    return im
+
 def getNumColors(path):
     """
     Detect the number of colors in the supplied image
@@ -212,6 +234,47 @@ def getNumColors(path):
             bestNumClusters = numClusters
 
     return bestNumClusters - 1 # Subtract one: background color is not included
+
+def extractColors(im, numColors):
+    """
+    Reduced im to numColors, and returns a list
+    of mask, color pairs
+    """
+    im = im.convert('P', palette = Image.ADAPTIVE, colors = int(numColors))
+
+    data = np.array(im.convert('RGBA'))
+    colorData = data.T
+    red, green, blue, alpha = data.T
+    im = Image.fromarray(data)
+
+    im_colors = im.convert('RGB').getcolors()
+    im_colors.sort()
+    im_colors.reverse()
+
+    # name = imagePath.split('.')
+    # newname = name[0] + "_adapt.jpg"
+    # im.convert('RGB').save(newname)
+
+    width, height = im.size
+
+    backgroundColor = getBackgroundColor(im)
+
+    colorSegments = []
+    for numpixels, color in im_colors:
+        if color != backgroundColor:
+
+            color_area = (red == color[0]) & (green == color[1]) & (blue == color[2]) # T/F Matrix of color location
+            indices = np.where(color_area == True)
+            coordinates = zip(indices[0], indices[1]) # stored col,row
+
+            mask = np.zeros((width, height))
+
+            for c in coordinates:
+                mask[c[0]][c[1]] = 1
+
+            colorSegments.append([mask, color])
+
+    return colorSegments
 
 class ToolConfig:
     """
@@ -577,20 +640,7 @@ class ImgPathGenerator:
         pattern = Image.open(toolConfig.patternPath)
         # Filter on small images for better traced outlines
         if max(pattern.size) < 800: # TODO: Make it possible to force extra filtering
-            pattern = pattern.convert('P', palette = Image.ADAPTIVE, colors = int(3))
-            pattern = pattern.convert('RGB')
-            pattern = np.array(pattern)
-
-            for i in range(10):
-                pattern = denoise_bilateral(pattern, sigma_color=0.088, sigma_spatial=0.5, multichannel = True)
-            for i in range(13):
-                pattern = denoise_bilateral(pattern, sigma_color=0.030, sigma_spatial=1.0, multichannel = True)
-
-            # skio.imshow(pattern)
-            # skio.show()
-            # return
-
-            pattern = Image.fromarray((pattern * 255).astype(np.uint8))
+            pattern = filterLoRez(pattern, 3)
 
         # pattern = pattern.convert('P', palette = Image.ADAPTIVE, colors = int(2))
         # name = imagePath.split('.')
@@ -601,37 +651,7 @@ class ImgPathGenerator:
         pattern = ImageOps.flip(pattern)
 
         # make pattern image into 2 color image for tracing
-        pattern = pattern.convert('P', palette = Image.ADAPTIVE, colors = int(2))
-
-        data = np.array(pattern.convert('RGBA'))
-        red, green, blue, alpha = data.T
-        pattern = Image.fromarray(data)
-
-        patternColors = pattern.convert('RGB').getcolors()
-        patternColors.sort()
-        patternColors.reverse()
-
-        # name = imagePath.split('.')
-        # newname = name[0] + "_adapt.jpg"
-        # pattern.convert('RGB').save(newname)
-
-        backgroundColor = getBackgroundColor(pattern)
-
-        count = 0
-        for numpixels, color in patternColors:
-            if color != backgroundColor:
-
-                color_area = (red == color[0]) & (green == color[1]) & (blue == color[2]) # T/F Matrix of color location
-
-                indices = np.where(color_area == True)
-                coordinates = zip(indices[0], indices[1]) # stored col,row
-
-                width, height = pattern.size
-
-                mask = np.zeros((width, height))
-
-                for c in coordinates:
-                    mask[c[0]][c[1]] = 1
+        mask, color = extractColors(pattern, 2)[0]
 
         bmp = potrace.Bitmap(mask)
 
@@ -1589,20 +1609,7 @@ def main(argv):
     im = Image.open(imagePath)
     if max(im.size) < 800: # TODO: Make it possible to force extra filtering
         print '\nPerforming filtering to improve image clarity...'
-        im = im.convert('P', palette = Image.ADAPTIVE, colors = int(numColors+1))
-        im = im.convert('RGB')
-        im = np.array(im)
-
-        for i in range(10):
-            im = denoise_bilateral(im, sigma_color=0.088, sigma_spatial=0.5, multichannel = True)
-        for i in range(13):
-            im = denoise_bilateral(im, sigma_color=0.030, sigma_spatial=1.0, multichannel = True)
-
-        # skio.imshow(im)
-        # skio.show()
-        # return
-
-        im = Image.fromarray((im * 255).astype(np.uint8))
+        im = filterLoRez(im, numColors)
 
     # im = im.convert('P', palette = Image.ADAPTIVE, colors = int(numColors))
     # name = imagePath.split('.')
@@ -1615,40 +1622,10 @@ def main(argv):
 
     print '\nSeparating colors...'
 
-    im = im.convert('P', palette = Image.ADAPTIVE, colors = int(numColors))
+    colorSegments = extractColors(im, numColors)
 
-    data = np.array(im.convert('RGBA'))
-    red, green, blue, alpha = data.T
-    im = Image.fromarray(data)
-
-    im_colors = im.convert('RGB').getcolors()
-    im_colors.sort()
-    im_colors.reverse()
-
-    # name = imagePath.split('.')
-    # newname = name[0] + "_adapt.jpg"
-    # im.convert('RGB').save(newname)
-
-    width, height = im.size
-
-    backgroundColor = getBackgroundColor(im)
-
-    count = 0
-    for numpixels, color in im_colors:
-        if color != backgroundColor:
-
-            color_area = (red == color[0]) & (green == color[1]) & (blue == color[2]) # T/F Matrix of color location
-
-            indices = np.where(color_area == True)
-            coordinates = zip(indices[0], indices[1]) # stored col,row
-
-            mask = np.zeros((width, height))
-
-            for c in coordinates:
-                mask[c[0]][c[1]] = 1
-
-            patherator.addImageData(mask, color)
-            count += 1
+    for mask, color in colorSegments:
+        patherator.addImageData(mask, color)
 
     if newWidth is None and newHeight is None:
         print '\033[91m' + 'Please provide a dimension!' + '\033[0m'
