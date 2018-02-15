@@ -7,10 +7,9 @@ Image2Path
 Dependencies: numpy, scipy, pillow, pypotrace, pyclipper, skimage, sklearn
 
 Example:
-  plotBounds = (xMinPlot, xMaxPlot
-                yMinPlot, yMaxPlot) # area reachable by all tools used
+  mediaSize = (mediaWidth, mediaHeight) # dimension of plotting media
   patherator = ImgPathGenerator()
-  patherator.configure(plotBounds = plotBounds, hasHome = False)
+  patherator.configure(mediaSize = mediaSize, alignToMedium = False)
   patherator.lowerCommand('Z') # Z for configured Z-Hop moves, o/w any GCode
   patherator.raiseCommand('Z') # Z for configured Z-Hop moves, o/w any GCode
   patherator.setGCodePath(gcodePath) # Save path
@@ -33,11 +32,10 @@ Example:
   patherator.generate() # Generate GCode and save to file
 
 ImgPathGenerator Configuration Parameters:
-  xMinPlot: Minimum x-axis toolhead position in mm, i.e. 0.0
-  xMaxPlot: Maximum x-axis toolhead position in mm, i.e. 200.0
-  yMinPlot: Minimum y-axis toolhead position in mm, i.e. 0.0
-  yMaxPlot: Maximum y-axis toolhead position in mm, i.e. 200.0
-  hasHome: whether to home before and after, or just align bottom left before
+  mediaWidth: Width of media in mm, i.e. 200.0
+  mediaHeight: Height of media in mm, i.e. 200.0
+  alignToMedium: whether to align point is bottom left of medium,
+    or bottom left of drawing
   travelSpeed: Speed for non-draw moves in mm/s, i.e. 100.0
 
 Example of imageData generation off of loaded Image:
@@ -114,6 +112,12 @@ def distance(p0, p1):
     """
     return math.sqrt((p0[0] - p1[0]) ** 2 + (p0[1] - p1[1]) ** 2)
 
+def brightness(color):
+    """
+    Returns the luminance of a color in RGB form
+    """
+    return 0.2126*color[0] + 0.7152*color[1] + 0.0722*color[2]
+
 def getBackgroundColor(im):
     """
     Detect the background color of an image.
@@ -163,6 +167,7 @@ def filterLoRez(im, desiredNumColors):
     Filter low resolution images to reduce compression
     and anti-alias artifacts
     """
+    # TODO: Tweak to play nicer with certain colors
     im = im.convert('P', palette = Image.ADAPTIVE, colors = int(desiredNumColors+1))
     im = im.convert('RGB')
     im = np.array(im)
@@ -248,7 +253,7 @@ def extractColors(im, numColors):
     im = Image.fromarray(data)
 
     im_colors = im.convert('RGB').getcolors()
-    im_colors.sort()
+    im_colors = sorted(im_colors, key=lambda x: brightness(x[1]))
     im_colors.reverse()
 
     # name = imagePath.split('.')
@@ -295,12 +300,10 @@ class ToolConfig:
 
 class ImgPathGenerator:
     def __init__(self):
-        self.xMinPlot = 0.0
-        self.xMaxPlot = 0.0
-        self.yMinPlot = 0.0
-        self.yMaxPlot = 0.0
+        self.mediaWidth = 0.0
+        self.mediaHeight = 0.0
         self.startPoint = np.array([0.0, 0.0])
-        self.hasHome = False
+        self.alignToMedium = False
         self.travelSpeed = None
         self.xPx = None
         self.yPx = None
@@ -308,6 +311,7 @@ class ImgPathGenerator:
         self.imageHeight = None
         self.xRange = None
         self.yRange = None
+        self.align = np.array([0.0, 0.0])
         self.imagePath = None
         self.gcodePath = None
         self.imData = []
@@ -1076,16 +1080,21 @@ class ImgPathGenerator:
         yMax = self.imageHeight
         self.xRange = (0.0, xMax)
         self.yRange = (0.0, yMax)
+
+        if self.alignToMedium: # Center the paths in the plotting area
+            self.align[0] = - (self.mediaWidth - self.imageWidth) / 2.0
+            self.align[1] = - (self.mediaHeight - self.imageHeight) / 2.0
+
         if self.imageWidth > self.imageHeight:
             previewW = 1024
             previewH = int((1024*self.imageHeight)/self.imageWidth)
         else:
             previewW = int((1024*self.imageWidth)/self.imageHeight)
             previewH = 1024
+
         self.previewData = np.ones((previewH, previewW, 3), dtype=np.uint8) * 255
 
-        return (xMax <= self.xMaxPlot - self.xMinPlot
-                and yMax <= self.yMaxPlot - self.yMinPlot)
+        return (xMax <= self.mediaWidth and yMax <= self.mediaHeight)
 
     def fit(self, width = None, height = None):
         """
@@ -1168,11 +1177,8 @@ class ImgPathGenerator:
             if self.preamble is not None:
                 f.write(self.preamble + '\n')
             f.write('G21\nG90\n') # preparatory gcode
-            if self.hasHome:
-                f.write('G28\nG0 Z5.0 F300\n')
-            else:
-                f.write('G92 X' + format(self.xRange[0], '.8f') + ' Y'
-                        + format(self.yRange[0], '.8f') + ' Z0\n')
+            f.write('G92 X' + format(self.align[0], '.8f') + ' Y'
+                    + format(self.align[1], '.8f') + '\n')
 
     def __endGcode(self, lastFile = True):
         """
@@ -1181,13 +1187,11 @@ class ImgPathGenerator:
         with open(self.gcodePath, 'a') as f:
             if self.postamble is not None:
                 f.write(self.postamble + '\n')
-            if self.hasHome and lastFile:
-                f.write('M400\nG28 X Y\n')
-            elif lastFile:
-                f.write('G0 X' + format(self.xRange[0], '.8f') + ' Y' + format(self.yRange[1], '.8f')
+            if lastFile:
+                f.write('G0 X' + format(self.xRange[0]+self.align[0], '.8f') + ' Y' + format(self.yRange[1]-self.align[1], '.8f')
                         + ' F' + str(self.travelSpeed*60.0) +'\n')
             else:
-                f.write('G0 X' + format(self.xRange[0], '.8f') + ' Y' + format(self.yRange[0], '.8f')
+                f.write('G0 X' + format(self.align[0], '.8f') + ' Y' + format(self.align[1], '.8f')
                         + ' F' + str(self.travelSpeed*60.0) +'\n')
 
     def __insertToolComment(self, toolConfig):
@@ -1269,13 +1273,6 @@ class ImgPathGenerator:
                 self.previewData -= self.__infillPreview(infill, lineColor, previewW, previewH,
                                                        dilateRadius, toolConfig.infillPattern)
 
-        if self.hasHome: # Center the paths in the plotting area
-            tx = (self.xMinPlot + self.xMaxPlot - self.imageWidth) / 2.0
-            ty = (self.yMinPlot + self.yMaxPlot - self.imageHeight) / 2.0
-            self.__translateAllPoints([allOutlines], tx, ty) # put outlines into an island
-            if toolConfig.infillDensity > 0.0:
-                self.__translateAllPoints(infill, tx, ty)
-
         # Now we are ready to save the paths as GCode
         with open(self.gcodePath, 'a') as f:
             if toolConfig.toolSelect is not None:
@@ -1330,15 +1327,13 @@ class ImgPathGenerator:
             self.__generatePath(bmp, toolConfig, generatePreview, lineColor)
             segmentIndex += 1
 
-    def configure(self, plotBounds, travelSpeed, preamble = None, postamble = None, hasHome = False):
-        self.xMinPlot = plotBounds[0]
-        self.xMaxPlot = plotBounds[1]
-        self.yMinPlot = plotBounds[2]
-        self.yMaxPlot = plotBounds[3]
+    def configure(self, mediaSize, travelSpeed, preamble = None, postamble = None, alignToMedium = False):
+        self.mediaWidth = mediaSize[0]
+        self.mediaHeight = mediaSize[1]
         self.travelSpeed = travelSpeed
         self.preamble = preamble
         self.postamble = postamble
-        self.hasHome = hasHome
+        self.alignToMedium = alignToMedium
 
     def setGCodePath(self, path):
         self.gcodePath = path
@@ -1429,8 +1424,8 @@ def main(argv):
     infillPattern = 'linear'
     patternPath = None
 
-    hasHome = False
-    xMinPlot, xMaxplot, yMinPlot, yMaxPlot = None, None, None, None
+    alignToMedium = False
+    mediaWidth, mediaHeight = None, None
     preamble, postamble = None, None
     lowerTool, raiseTool, toolSelect = None, None, None
 
@@ -1469,16 +1464,12 @@ def main(argv):
     for config in configuration[0]:
         configTok = config.split('=')
         configTok[0] = configTok[0].lower()
-        if configTok[0] == 'xminplot':
-            xMinPlot = float(configTok[1])
-        elif configTok[0] == 'xmaxplot':
-            xMaxPlot = float(configTok[1])
-        elif configTok[0] == 'yminplot':
-            yMinPlot = float(configTok[1])
-        elif configTok[0] == 'ymaxplot':
-            yMaxPlot = float(configTok[1])
-        elif configTok[0] == 'hashome':
-            hasHome = True
+        if configTok[0] == 'mediawidth':
+            mediaWidth = float(configTok[1])
+        elif configTok[0] == 'mediaheight':
+            mediaHeight = float(configTok[1])
+        elif configTok[0] == 'aligntomedium':
+            alignToMedium = True
         elif configTok[0] == 'preamble':
             preamble = configTok[1].replace('|', '\n')
         elif configTok[0] == 'postamble':
@@ -1501,17 +1492,17 @@ def main(argv):
         if configTok[0] == 'singlefile':
             singleFile = True
 
-    if xMinPlot is None or xMaxPlot is None or yMinPlot is None or yMaxPlot is None:
+    if mediaWidth is None or mediaHeight is None:
         print '\033[91m' + 'Undefined plotting bounds!' + '\033[0m'
         sys.exit()
 
     print '\nOriginal image: ' + basename(imagePath)
 
-    plotBounds = (xMinPlot, xMaxPlot, yMinPlot, yMaxPlot)
+    mediaSize = (mediaWidth, mediaHeight)
     patherator = ImgPathGenerator()
-    patherator.configure(plotBounds = plotBounds, travelSpeed = travelSpeed,
+    patherator.configure(mediaSize = mediaSize, travelSpeed = travelSpeed,
                          preamble = preamble, postamble = postamble,
-                         hasHome = hasHome,)
+                         alignToMedium = alignToMedium,)
 
     patherator.setImagePath(imagePath)
     patherator.setGCodePath(gcodePath)
@@ -1635,8 +1626,8 @@ def main(argv):
             print '\033[91m' + '\nDesired dimensions do not fit with the plotting boundaries!' + '\033[0m'
             print 'Requested width: ' + str(patherator.imageWidth/10.0) + 'cm'
             print 'Requested height: ' + str(patherator.imageHeight/10.0) + 'cm'
-            print 'Max width: ' + str((patherator.xMaxPlot - patherator.xMinPlot)/10.0) + 'cm'
-            print 'Max height: ' + str((patherator.yMaxPlot - patherator.yMinPlot)/10.0) + 'cm'
+            print 'Max width: ' + str(patherator.mediaWidth/10.0) + 'cm'
+            print 'Max height: ' + str(patherator.mediaHeight/10.0) + 'cm'
             sys.exit()
 
     print '\nCalculated dimensions:'
@@ -1645,8 +1636,8 @@ def main(argv):
 
     patherator.generate(singleFile, preview, savePreview)
 
-    if hasHome:
-        print '\n' + '\033[93m' + 'Align medium to center of plotting area before running!' + '\033[0m'
+    if alignToMedium:
+        print '\n' + '\033[93m' + 'Align tool to bottom left of medium before running!' + '\033[0m'
     else:
         print '\n' + '\033[93m' + 'Align tool to bottom left of plot before running!' + '\033[0m'
 
