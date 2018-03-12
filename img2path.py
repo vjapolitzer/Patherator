@@ -12,7 +12,7 @@ Example:
   pathy.configure(mediaSize = mediaSize, alignToMedium = False)
   pathy.lowerCommand('Z') # Z for configured Z-Hop moves, o/w any GCode
   pathy.raiseCommand('Z') # Z for configured Z-Hop moves, o/w any GCode
-  pathy.setGCodePath(gcodePath) # Save path
+  pathy.setGCodeSavePath(gcodeSavePath) # Save path
   pathy.fit(width, height)  # Desired bounding dimensions
   pathy.addImageData(imageData) # Example below for generating data
   newTool = ToolConfig()
@@ -39,7 +39,7 @@ Patherator Configuration Parameters:
   travelSpeed: Speed for non-draw moves in mm/s, i.e. 100.0
 
 Example of imageData generation off of loaded Image:
-  im = Image.open(imagePath)
+  im = Image.open(srcImagePath)
   im = im.convert('L')
   im = ImageOps.flip(im)
   im_px = im.load()
@@ -287,7 +287,7 @@ def extractColors(im, numColors):
     im_colors = sorted(im_colors, key=lambda x: brightness(x[1]))
     im_colors.reverse()
 
-    # name = imagePath.split('.')
+    # name = srcImagePath.split('.')
     # newname = name[0] + "_adapt.jpg"
     # im.convert('RGB').save(newname)
 
@@ -343,8 +343,8 @@ class Patherator:
         self.xRange = None
         self.yRange = None
         self.align = np.array([0.0, 0.0])
-        self.imagePath = None
-        self.gcodePath = None
+        self.srcImagePath = None
+        self.gcodeSavePath = None
         self.imData = []
         self.lineColorData = []
         self.toolData = []
@@ -678,7 +678,7 @@ class Patherator:
             pattern = filterLoRez(pattern, 3)
 
         # pattern = pattern.convert('P', palette = Image.ADAPTIVE, colors = int(2))
-        # name = imagePath.split('.')
+        # name = srcImagePath.split('.')
         # newname = name[0] + "WITHFILTER.png"
         # pattern.convert('RGB').save(newname)
         #
@@ -1189,13 +1189,13 @@ class Patherator:
     def __initGcode(self):
         """
         Create GCode file and insert basic comments
-        imagePath => path/to/input/image
-        gcodePath => path/to/output.gcode
+        srcImagePath => path/to/input/image
+        gcodeSavePath => path/to/output.gcode
         width and height from calling calculateDim
         """
-        with open(self.gcodePath, 'w') as f:
+        with open(self.gcodeSavePath, 'w') as f:
             f.write('; Patherator Image2Path GCode\n;\n')
-            f.write('; Original image: ' + basename(self.imagePath) + '\n;\n')
+            f.write('; Original image: ' + basename(self.srcImagePath) + '\n;\n')
             f.write('; Width: ' + str(self.plotWidth/10.0) + 'cm\n')
             f.write('; Height: ' + str(self.plotHeight/10.0) + 'cm\n;\n')
 
@@ -1203,7 +1203,7 @@ class Patherator:
         """
         Append GCode file with preparatory gcode
         """
-        with open(self.gcodePath, 'a') as f:
+        with open(self.gcodeSavePath, 'a') as f:
             f.write('; Begin GCode\n')
             if self.preamble is not None:
                 f.write(self.preamble + '\n')
@@ -1215,7 +1215,7 @@ class Patherator:
         """
         Append GCode file with ending gcode
         """
-        with open(self.gcodePath, 'a') as f:
+        with open(self.gcodeSavePath, 'a') as f:
             if self.postamble is not None:
                 f.write(self.postamble + '\n')
             if lastFile:
@@ -1229,7 +1229,7 @@ class Patherator:
         """
         Append GCode file with tool parameter comments
         """
-        with open(self.gcodePath, 'a') as f:
+        with open(self.gcodeSavePath, 'a') as f:
             if toolConfig.toolSelect is not None:
                 f.write('; Tool select: ' + toolConfig.toolSelect.replace('\n', '|') + '\n')
             f.write('; Tool width: ' + str(toolConfig.toolWidth) + 'mm\n')
@@ -1305,7 +1305,7 @@ class Patherator:
                                                        dilateRadius, toolConfig.infillPattern)
 
         # Now we are ready to save the paths as GCode
-        with open(self.gcodePath, 'a') as f:
+        with open(self.gcodeSavePath, 'a') as f:
             if toolConfig.toolSelect is not None:
                 f.write(toolConfig.toolSelect + '\n') # tool select code
 
@@ -1366,11 +1366,11 @@ class Patherator:
         self.postamble = postamble
         self.alignToMedium = alignToMedium
 
-    def setGCodePath(self, path):
-        self.gcodePath = path
+    def setGCodeSavePath(self, path):
+        self.gcodeSavePath = path
 
-    def setImagePath(self, path):
-        self.imagePath = path
+    def setSrcImagePath(self, path):
+        self.srcImagePath = path
 
     def addImageData(self, data, lineColor):
         """
@@ -1400,7 +1400,7 @@ class Patherator:
 
     def generate(self, singleFile = False, preview = True, savePreview = False):
         print('\nGenerating toolpaths...')
-        basePath = self.gcodePath.split('.')[0]
+        basePath = self.gcodeSavePath.split('.')[0]
         if singleFile:
             self.__initGcode()
             self.__insertAllToolComments()
@@ -1411,7 +1411,7 @@ class Patherator:
             fileNum = 1
             for bmp, toolConfig, lineColor in zip(self.imData, self.toolData, self.lineColorData):
                 print 'Part ' + str(fileNum) + '/' + str(len(self.imData))
-                self.setGCodePath(basePath + str(fileNum) + '.gcode')
+                self.setGCodeSavePath(basePath + str(fileNum) + '.gcode')
                 self.__initGcode()
                 self.__insertToolComment(toolConfig)
                 self.__startGcode()
@@ -1439,8 +1439,8 @@ def main(argv):
     opts, args = getopt.getopt(argv, 'hspi:c:n:', ['help', 'savePreview', 'preview', 'input=',
                                                    'colorDetect', 'numColors'])
     jsonPath = None
-    imagePath = None
-    gcodePath = None
+    srcImagePath = None
+    gcodeSavePath = None
     toolWidth = 0.0
     drawSpeed = 25.0
     travelSpeed = 50.0
@@ -1485,15 +1485,12 @@ def main(argv):
     with open(jsonPath) as jsonFile:
         jsonConfig = json.load(jsonFile)
 
-    requiredItems = ['plotter', 'image', 'tool']
-    for i in requiredItems:
-        if i not in jsonConfig:
-            print'\033[91m' + 'jsonConfig ERROR!' + '\033[0m'
-            notDefined(i)
-            sys.exit()
+    requiredItems = ['plotter', 'plot', 'tool']
+    if not checkDefined(requiredItems, jsonConfig, 'jsonConfig'):
+        sys.exit()
 
     plotterConfig = jsonConfig['plotter']
-    imageConfig = jsonConfig['image']
+    plotConfig = jsonConfig['plot']
     toolConfigList = jsonConfig['tool']
 
     requiredItems = ['mediaWidth', 'mediaHeight', 'travelSpeed',
@@ -1523,28 +1520,34 @@ def main(argv):
     if not checkSameType(type(singleFile), type(True), 'singleFile'):
         sys.exit()
 
-    requiredItems = ['path', 'plotWidth', 'plotHeight']
-    if not checkDefined(requiredItems, imageConfig, 'imageConfig'):
+    requiredItems = ['srcImagePath', 'plotWidth', 'plotHeight']
+    if not checkDefined(requiredItems, plotConfig, 'plotConfig'):
         sys.exit()
 
-    imagePath = imageConfig['path']
-    gcodePath = splitext(imagePath)[0] + '.gcode'
+    srcImagePath = plotConfig['srcImagePath']
+    if 'gcodeSavePath' in plotConfig:
+        gcodeSavePath = plotConfig['gcodeSavePath']
+        gcodeSaveDirectory = os.path.dirname(gcodeSavePath)
+        if not os.path.exists(gcodeSaveDirectory):
+            os.mkdir(gcodeSaveDirectory)
+    else:
+        gcodeSavePath = splitext(srcImagePath)[0] + '.gcode'
 
-    plotWidth = imageConfig['plotWidth']
-    plotHeight = imageConfig['plotHeight']
+    plotWidth = plotConfig['plotWidth']
+    plotHeight = plotConfig['plotHeight']
 
-    print plotWidth, type(plotWidth)
+    print gcodeSavePath
     sys.exit()
 
-    print '\nOriginal image: ' + basename(imagePath)
+    print '\nOriginal image: ' + basename(srcImagePath)
 
     pathy = Patherator()
     pathy.configure(mediaSize = mediaSize, travelSpeed = travelSpeed,
                          preamble = preamble, postamble = postamble,
                          alignToMedium = alignToMedium,)
 
-    pathy.setImagePath(imagePath)
-    pathy.setGCodePath(gcodePath)
+    pathy.setSrcImagePath(srcImagePath)
+    pathy.setGCodeSavePath(gcodeSavePath)
 
     segmentNumber = 1
     for plotConfig in configuration[2:]:
@@ -1636,13 +1639,13 @@ def main(argv):
 
     numColors = pathy.numTools() + 1
 
-    im = Image.open(imagePath)
+    im = Image.open(srcImagePath)
     if max(im.size) < 800: # TODO: Make it possible to force extra filtering
         print '\nPerforming filtering to improve image clarity...'
         im = filterLoRez(im, numColors)
 
     # im = im.convert('P', palette = Image.ADAPTIVE, colors = int(numColors))
-    # name = imagePath.split('.')
+    # name = srcImagePath.split('.')
     # newname = name[0] + "WITHFILTER.png"
     # im.convert('RGB').save(newname)
     #
