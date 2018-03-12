@@ -8,13 +8,13 @@ Dependencies: numpy, scipy, pillow, pypotrace, pyclipper, skimage, sklearn
 
 Example:
   mediaSize = (mediaWidth, mediaHeight) # dimension of plotting media
-  patherator = ImgPathGenerator()
-  patherator.configure(mediaSize = mediaSize, alignToMedium = False)
-  patherator.lowerCommand('Z') # Z for configured Z-Hop moves, o/w any GCode
-  patherator.raiseCommand('Z') # Z for configured Z-Hop moves, o/w any GCode
-  patherator.setGCodePath(gcodePath) # Save path
-  patherator.fit(width, height)  # Desired bounding dimensions
-  patherator.addImageData(imageData) # Example below for generating data
+  pathy = Patherator()
+  pathy.configure(mediaSize = mediaSize, alignToMedium = False)
+  pathy.lowerCommand('Z') # Z for configured Z-Hop moves, o/w any GCode
+  pathy.raiseCommand('Z') # Z for configured Z-Hop moves, o/w any GCode
+  pathy.setGCodePath(gcodePath) # Save path
+  pathy.fit(width, height)  # Desired bounding dimensions
+  pathy.addImageData(imageData) # Example below for generating data
   newTool = ToolConfig()
   newTool.toolWidth = toolWidth
   newTool.lowerTool = lowerTool
@@ -27,11 +27,11 @@ Example:
   newTool.infillAngle = infillAngle
   newTool.infillOverlap = infillOverlap
   newTool.patternPath = patternPath
-  patherator.addTool(newTool)
+  pathy.addTool(newTool)
   # Repeat for each imageData/toolConfig pair
-  patherator.generate() # Generate GCode and save to file
+  pathy.generate() # Generate GCode and save to file
 
-ImgPathGenerator Configuration Parameters:
+Patherator Configuration Parameters:
   mediaWidth: Width of media in mm, i.e. 200.0
   mediaHeight: Height of media in mm, i.e. 200.0
   alignToMedium: whether to align point is bottom left of medium,
@@ -67,6 +67,7 @@ Tool Configuration Parameters:
 """
 
 import sys, os, getopt, time
+import json
 import math, csv
 from os.path import basename, splitext
 from copy import deepcopy
@@ -83,6 +84,36 @@ from skimage.draw import line_aa as drawLine
 import skimage.morphology as skmorph
 from sklearn.cluster import KMeans
 from sklearn import metrics
+
+def checkDefined(requiredItems, configItems, name):
+    """
+    Check if all required items are defined
+    """
+    allReqsFound = True
+    for i in requiredItems:
+        if i not in configItems:
+            print'\033[91m' + name + ' ERROR!' + '\033[0m'
+            print '\033[91m' + i + ' not defined!' + '\033[0m'
+            allReqsFound = False
+    return allReqsFound
+
+def checkNonZero(val, name):
+    """
+    Check for nonzero value
+    """
+    if val > 0.0:
+        return True
+    print '\033[91m' + str(val) + ' is not valid ' + name + '! Must be non-zero.' + '\033[0m'
+    return False
+
+def checkSameType(type, controlType, name):
+    """
+    Check if type and controlType are the same
+    """
+    if type == controlType:
+        return True
+    print '\033[91m' + name + ' is not '+ str(controlType) + '!' + '\033[0m'
+    return False
 
 def mapToRange(val, srcMax, dst):
     """
@@ -298,7 +329,7 @@ class ToolConfig:
         self.toolSelect = None
         self.patternPath = None
 
-class ImgPathGenerator:
+class Patherator:
     def __init__(self):
         self.mediaWidth = 0.0
         self.mediaHeight = 0.0
@@ -307,8 +338,8 @@ class ImgPathGenerator:
         self.travelSpeed = None
         self.xPx = None
         self.yPx = None
-        self.imageWidth = None
-        self.imageHeight = None
+        self.plotWidth = None
+        self.plotHeight = None
         self.xRange = None
         self.yRange = None
         self.align = np.array([0.0, 0.0])
@@ -325,14 +356,14 @@ class ImgPathGenerator:
         """
         Translate point to be centered about the origin
         """
-        t = np.array([(self.imageWidth / 2.0), (self.imageHeight / 2.0)])
+        t = np.array([(self.plotWidth / 2.0), (self.plotHeight / 2.0)])
         return point - t
 
     def __iTransOrigin(self, point):
         """
         Translate point to be centered about the bed center
         """
-        t = np.array([(self.imageWidth / 2.0), (self.imageHeight / 2.0)])
+        t = np.array([(self.plotWidth / 2.0), (self.plotHeight / 2.0)])
         return point + t
 
     def __rotateAboutOrigin(self, point, theta):
@@ -417,7 +448,7 @@ class ImgPathGenerator:
         Generate points along an Archimedes spiral, with spacing mm
         between the spiral curves.
         """
-        rMax = math.sqrt((self.imageWidth)**2 + (self.imageHeight)**2) / 2.0
+        rMax = math.sqrt((self.plotWidth)**2 + (self.plotHeight)**2) / 2.0
         maxAmp = spacing / 2.0
         coils = rMax / spacing
         thetaMax = 2.0 * np.pi * coils
@@ -427,7 +458,7 @@ class ImgPathGenerator:
         r = spacing
         theta = (2.0 * np.pi) + (chord / r)
 
-        path = [[self.imageWidth / 2.0, self.imageHeight / 2.0]]
+        path = [[self.plotWidth / 2.0, self.plotHeight / 2.0]]
 
         while theta < thetaMax:
             x, y = r * np.cos(theta), r * np.sin(theta)
@@ -441,7 +472,7 @@ class ImgPathGenerator:
         Generate points along a golden spiral
         """
         path = []
-        rMax = math.sqrt((self.imageWidth)**2 + (self.imageHeight)**2) / 2.0
+        rMax = math.sqrt((self.plotWidth)**2 + (self.plotHeight)**2) / 2.0
         golden = (1 + 5 ** 0.5) / 2
         omega = 0.27
         t = 0.0
@@ -498,8 +529,8 @@ class ImgPathGenerator:
             elif step == '-':
                 theta = (theta + np.radians(turnAngle)) % (2 * np.pi)
 
-        tX = (((self.imageWidth) / 2.0) - (minX + maxX) / 2.0)
-        tY = (((self.imageHeight) / 2.0) - (minY + maxY) / 2.0)
+        tX = (((self.plotWidth) / 2.0) - (minX + maxX) / 2.0)
+        tY = (((self.plotHeight) / 2.0) - (minY + maxY) / 2.0)
 
         for point in curve: # center the curve on the plotting area
             point[0], point[1] = point[0] + tX, point[1] + tY
@@ -608,9 +639,9 @@ class ImgPathGenerator:
         Generate points along an Octagram spiral.
         Thanks to: https://github.com/alexrj/Slic3r/
         """
-        rMax = math.sqrt((self.imageWidth)**2 + (self.imageHeight)**2) / 2.0
+        rMax = math.sqrt((self.plotWidth)**2 + (self.plotHeight)**2) / 2.0
         r = 0.0
-        ogsFill = [[self.imageWidth / 2.0, self.imageHeight / 2.0]]
+        ogsFill = [[self.plotWidth / 2.0, self.plotHeight / 2.0]]
         while r < rMax:
             r += spacing
             rx = r / math.sqrt(2.0)
@@ -659,7 +690,7 @@ class ImgPathGenerator:
 
         bmp = potrace.Bitmap(mask)
 
-        poopoo = int(math.pi * (((toolConfig.toolWidth * (pattern.size[0]/self.imageWidth)) / 2.0) ** 2))
+        poopoo = int(math.pi * (((toolConfig.toolWidth * (pattern.size[0]/self.plotWidth)) / 2.0) ** 2))
 
         # trace the image
         path = bmp.trace(turdsize = poopoo, opttolerance = 0.2)
@@ -711,7 +742,7 @@ class ImgPathGenerator:
         patternDimX = patternMaxX - patternMinX
         patternDimY = patternMaxY - patternMinY
 
-        fillShapeMax = mapToRange(toolConfig.infillDensity, 100.0, (self.imageWidth, 3.0*toolConfig.toolWidth))
+        fillShapeMax = mapToRange(toolConfig.infillDensity, 100.0, (self.plotWidth, 3.0*toolConfig.toolWidth))
         if patternDimX > patternDimY:
             fillShapeWidth = fillShapeMax
             fillShapeHeight = (fillShapeMax * patternDimY) / patternDimX
@@ -932,11 +963,11 @@ class ImgPathGenerator:
         infillUnclipped = []
         infillSpacing = toolConfig.toolWidth/(toolConfig.infillDensity/100.0)
 
-        fillRange = math.sqrt(self.imageWidth**2 + self.imageHeight**2)
-        xFillMax = (self.imageWidth + fillRange) / 2.0
-        xFillMin = (self.imageWidth - fillRange) / 2.0
-        yFillMax = (self.imageHeight + fillRange) / 2.0
-        yFillMin = (self.imageHeight - fillRange) / 2.0
+        fillRange = math.sqrt(self.plotWidth**2 + self.plotHeight**2)
+        xFillMax = (self.plotWidth + fillRange) / 2.0
+        xFillMin = (self.plotWidth - fillRange) / 2.0
+        yFillMax = (self.plotHeight + fillRange) / 2.0
+        yFillMin = (self.plotHeight - fillRange) / 2.0
 
         if toolConfig.infillPattern in ('linear', 'zigzag', 'grid'):
             for i in floatRange(yFillMin, yFillMax, infillSpacing):
@@ -1068,28 +1099,28 @@ class ImgPathGenerator:
         if ((desiredWidth is not None and desiredHeight is None)
             or (desiredWidth is not None and desiredHeight is not None
                 and desiredWidth/desiredHeight < aspectRatio)):
-            self.imageWidth = desiredWidth
-            self.imageHeight = desiredWidth / aspectRatio
+            self.plotWidth = desiredWidth
+            self.plotHeight = desiredWidth / aspectRatio
         else:
-            self.imageWidth = desiredHeight * aspectRatio
-            self.imageHeight = desiredHeight
+            self.plotWidth = desiredHeight * aspectRatio
+            self.plotHeight = desiredHeight
 
         xMin = 0.0
-        xMax = self.imageWidth
+        xMax = self.plotWidth
         yMin = 0.0
-        yMax = self.imageHeight
+        yMax = self.plotHeight
         self.xRange = (0.0, xMax)
         self.yRange = (0.0, yMax)
 
         if self.alignToMedium: # Center the paths in the plotting area
-            self.align[0] = - (self.mediaWidth - self.imageWidth) / 2.0
-            self.align[1] = - (self.mediaHeight - self.imageHeight) / 2.0
+            self.align[0] = - (self.mediaWidth - self.plotWidth) / 2.0
+            self.align[1] = - (self.mediaHeight - self.plotHeight) / 2.0
 
-        if self.imageWidth > self.imageHeight:
+        if self.plotWidth > self.plotHeight:
             previewW = 1024
-            previewH = int((1024*self.imageHeight)/self.imageWidth)
+            previewH = int((1024*self.plotHeight)/self.plotWidth)
         else:
-            previewW = int((1024*self.imageWidth)/self.imageHeight)
+            previewW = int((1024*self.plotWidth)/self.plotHeight)
             previewH = 1024
 
         self.previewData = np.ones((previewH, previewW, 3), dtype=np.uint8) * 255
@@ -1114,10 +1145,10 @@ class ImgPathGenerator:
         for outline in allOutlines:
             for i in range(len(outline)):
                 p1, p2 = deepcopy(outline[i-1]), deepcopy(outline[i])
-                p1[0] = mapToRange(p1[0], self.imageWidth, (0, previewW))
-                p1[1] = mapToRange(p1[1], self.imageHeight, (0, previewH))
-                p2[0] = mapToRange(p2[0], self.imageWidth, (0, previewW))
-                p2[1] = mapToRange(p2[1], self.imageHeight, (0, previewH))
+                p1[0] = mapToRange(p1[0], self.plotWidth, (0, previewW))
+                p1[1] = mapToRange(p1[1], self.plotHeight, (0, previewH))
+                p2[0] = mapToRange(p2[0], self.plotWidth, (0, previewW))
+                p2[1] = mapToRange(p2[1], self.plotHeight, (0, previewH))
                 rr, cc, val = drawLine(int(p1[1]), int(p1[0]), int(p2[1]), int(p2[0]))
                 perimPreview[rr, cc] = val
         dilated = skmorph.dilation(perimPreview, skmorph.disk(int(dilateRadius)))
@@ -1141,10 +1172,10 @@ class ImgPathGenerator:
                     startDex = 1
                 for i in range(startDex, len(line)):
                     p1, p2 = deepcopy(line[i-1]), deepcopy(line[i])
-                    p1[0] = mapToRange(p1[0], self.imageWidth, (0, previewW))
-                    p1[1] = mapToRange(p1[1], self.imageHeight, (0, previewH))
-                    p2[0] = mapToRange(p2[0], self.imageWidth, (0, previewW))
-                    p2[1] = mapToRange(p2[1], self.imageHeight, (0, previewH))
+                    p1[0] = mapToRange(p1[0], self.plotWidth, (0, previewW))
+                    p1[1] = mapToRange(p1[1], self.plotHeight, (0, previewH))
+                    p2[0] = mapToRange(p2[0], self.plotWidth, (0, previewW))
+                    p2[1] = mapToRange(p2[1], self.plotHeight, (0, previewH))
                     rr, cc, val = drawLine(int(p1[1]), int(p1[0]), int(p2[1]), int(p2[0]))
                     fillPreview[rr, cc] = val
         dilated = skmorph.dilation(fillPreview, skmorph.disk(int(dilateRadius)))
@@ -1165,8 +1196,8 @@ class ImgPathGenerator:
         with open(self.gcodePath, 'w') as f:
             f.write('; Patherator Image2Path GCode\n;\n')
             f.write('; Original image: ' + basename(self.imagePath) + '\n;\n')
-            f.write('; Width: ' + str(self.imageWidth/10.0) + 'cm\n')
-            f.write('; Height: ' + str(self.imageHeight/10.0) + 'cm\n;\n')
+            f.write('; Width: ' + str(self.plotWidth/10.0) + 'cm\n')
+            f.write('; Height: ' + str(self.plotHeight/10.0) + 'cm\n;\n')
 
     def __startGcode(self):
         """
@@ -1227,7 +1258,7 @@ class ImgPathGenerator:
         # ignore outlines that encapsulate an area of less than poopoo
         poopoo = 2
         if toolConfig.toolWidth > 0.0:
-            poopoo = int(math.pi * (((toolConfig.toolWidth * (self.xPx/self.imageWidth)) / 2.0) ** 2))
+            poopoo = int(math.pi * (((toolConfig.toolWidth * (self.xPx/self.plotWidth)) / 2.0) ** 2))
         # Trace the bitmap to a path
         path = bmp.trace(turdsize = poopoo, opttolerance = 0.2)
 
@@ -1265,7 +1296,7 @@ class ImgPathGenerator:
         if generatePreview:
             print '  Generating preview...'
             previewW, previewH = self.previewData.shape[1], self.previewData.shape[0]
-            dilateRadius = ((toolConfig.toolWidth * float(previewW)) / self.imageWidth) / 3.0
+            dilateRadius = ((toolConfig.toolWidth * float(previewW)) / self.plotWidth) / 3.0
             if toolConfig.perimeters > 0:
                 self.previewData -= self.__outlinePreview(allOutlines, lineColor, previewW, previewH, dilateRadius)
 
@@ -1407,17 +1438,15 @@ def usage():
 def main(argv):
     opts, args = getopt.getopt(argv, 'hspi:c:n:', ['help', 'savePreview', 'preview', 'input=',
                                                    'colorDetect', 'numColors'])
-    csvPath = None
+    jsonPath = None
     imagePath = None
     gcodePath = None
-    toolType = None
-    toolPosition = None
     toolWidth = 0.0
     drawSpeed = 25.0
-    travelSpeed = 100.0
+    travelSpeed = 50.0
     perimeters = 1
-    newWidth = None
-    newHeight = None
+    plotWidth = None
+    plotHeight = None
     infillAngle = 45.0
     infillDensity = 100.0
     infillOverlap = 50.0
@@ -1438,7 +1467,7 @@ def main(argv):
             usage()
             sys.exit()
         elif opt in ('-i', '--input='):
-            csvPath = arg
+            jsonPath = arg
         elif opt in ('-s', '--savePreview'):
             savePreview = True
         elif opt in ('-p', '--preview'):
@@ -1447,65 +1476,75 @@ def main(argv):
             print getNumColors(arg)
             return
 
-    if csvPath == None:
-        print'\033[91m' + 'Please select an input file with -i <input.csv>' + '\033[0m'
+    if jsonPath == None:
+        print'\033[91m' + 'Please select an input file with -i <input.json>' + '\033[0m'
         sys.exit()
 
-    print 'Reading ' + basename(csvPath)
+    print 'Reading ' + basename(jsonPath)
 
-    with open(csvPath, 'rb') as configFile:
-        configReader = csv.reader(configFile, delimiter=',', quotechar='\'')
-        configuration = []
-        for row in configReader:
-            if len(row) == 0 or ';' in row[0]:
-                continue
-            configuration.append(row)
+    with open(jsonPath) as jsonFile:
+        jsonConfig = json.load(jsonFile)
 
-    for config in configuration[0]:
-        configTok = config.split('=')
-        configTok[0] = configTok[0].lower()
-        if configTok[0] == 'mediawidth':
-            mediaWidth = float(configTok[1])
-        elif configTok[0] == 'mediaheight':
-            mediaHeight = float(configTok[1])
-        elif configTok[0] == 'aligntomedium':
-            alignToMedium = True
-        elif configTok[0] == 'preamble':
-            preamble = configTok[1].replace('|', '\n')
-        elif configTok[0] == 'postamble':
-            postamble = configTok[1].replace('|', '\n')
-        elif configTok[0] == 'travelspeed':
-            travelSpeed = float(configTok[1])
-            if travelSpeed < 0.0:
-                print '\033[91m' + configTok[1] + 'mm/s is not a valid travelSpeed!' + '\033[0m'
-                sys.exit()
+    requiredItems = ['plotter', 'image', 'tool']
+    for i in requiredItems:
+        if i not in jsonConfig:
+            print'\033[91m' + 'jsonConfig ERROR!' + '\033[0m'
+            notDefined(i)
+            sys.exit()
 
-    imagePath = configuration[1][0]
+    plotterConfig = jsonConfig['plotter']
+    imageConfig = jsonConfig['image']
+    toolConfigList = jsonConfig['tool']
+
+    requiredItems = ['mediaWidth', 'mediaHeight', 'travelSpeed',
+                     'alignToMedium', 'singleFile']
+    if not checkDefined(requiredItems, plotterConfig, 'plotterConfig'):
+        sys.exit()
+
+    mediaWidth = plotterConfig['mediaWidth']
+    mediaHeight = plotterConfig['mediaHeight']
+    mediaSize = (mediaWidth, mediaHeight)
+
+    for dimension in mediaSize:
+        if not checkNonZero(dimension, 'dimension'):
+            sys.exit()
+
+    travelSpeed = plotterConfig['travelSpeed']
+
+    if not checkNonZero(travelSpeed, 'travelSpeed'):
+        sys.exit()
+
+    alignToMedium = plotterConfig['alignToMedium']
+    singleFile = plotterConfig['singleFile']
+
+    if not checkSameType(type(alignToMedium), type(True), 'alignToMedium'):
+        sys.exit()
+
+    if not checkSameType(type(singleFile), type(True), 'singleFile'):
+        sys.exit()
+
+    requiredItems = ['path', 'plotWidth', 'plotHeight']
+    if not checkDefined(requiredItems, imageConfig, 'imageConfig'):
+        sys.exit()
+
+    imagePath = imageConfig['path']
     gcodePath = splitext(imagePath)[0] + '.gcode'
-    for config in configuration[1][1:]:
-        configTok = config.split('=')
-        configTok[0] = configTok[0].lower()
-        if configTok[0] == 'width':
-            newWidth = float(configTok[1])*10.0 # convert to mm
-        if configTok[0] == 'height':
-            newHeight = float(configTok[1])*10.0 # convert to mm
-        if configTok[0] == 'singlefile':
-            singleFile = True
 
-    if mediaWidth is None or mediaHeight is None:
-        print '\033[91m' + 'Undefined plotting bounds!' + '\033[0m'
-        sys.exit()
+    plotWidth = imageConfig['plotWidth']
+    plotHeight = imageConfig['plotHeight']
+
+    print plotWidth, type(plotWidth)
+    sys.exit()
 
     print '\nOriginal image: ' + basename(imagePath)
 
-    mediaSize = (mediaWidth, mediaHeight)
-    patherator = ImgPathGenerator()
-    patherator.configure(mediaSize = mediaSize, travelSpeed = travelSpeed,
+    pathy = Patherator()
+    pathy.configure(mediaSize = mediaSize, travelSpeed = travelSpeed,
                          preamble = preamble, postamble = postamble,
                          alignToMedium = alignToMedium,)
 
-    patherator.setImagePath(imagePath)
-    patherator.setGCodePath(gcodePath)
+    pathy.setImagePath(imagePath)
+    pathy.setGCodePath(gcodePath)
 
     segmentNumber = 1
     for plotConfig in configuration[2:]:
@@ -1580,7 +1619,7 @@ def main(argv):
         newTool.infillAngle = infillAngle
         newTool.infillOverlap = infillOverlap
         newTool.patternPath = patternPath
-        patherator.addTool(newTool)
+        pathy.addTool(newTool)
 
         print '\nPart ' + str(segmentNumber) + ' Configuration:'
         if toolSelect is not None:
@@ -1595,7 +1634,7 @@ def main(argv):
             print 'Infill overlap: ' + str(infillOverlap) + '%'
         segmentNumber += 1
 
-    numColors = patherator.numTools() + 1
+    numColors = pathy.numTools() + 1
 
     im = Image.open(imagePath)
     if max(im.size) < 800: # TODO: Make it possible to force extra filtering
@@ -1616,25 +1655,25 @@ def main(argv):
     colorSegments = extractColors(im, numColors)
 
     for mask, color in colorSegments:
-        patherator.addImageData(mask, color)
+        pathy.addImageData(mask, color)
 
-    if newWidth is None and newHeight is None:
+    if plotWidth is None and plotHeight is None:
         print '\033[91m' + 'Please provide a dimension!' + '\033[0m'
         sys.exit()
     else:
-        if not patherator.fit(newWidth, newHeight):
+        if not pathy.fit(plotWidth, plotHeight):
             print '\033[91m' + '\nDesired dimensions do not fit with the plotting boundaries!' + '\033[0m'
-            print 'Requested width: ' + str(patherator.imageWidth/10.0) + 'cm'
-            print 'Requested height: ' + str(patherator.imageHeight/10.0) + 'cm'
-            print 'Max width: ' + str(patherator.mediaWidth/10.0) + 'cm'
-            print 'Max height: ' + str(patherator.mediaHeight/10.0) + 'cm'
+            print 'Requested width: ' + str(pathy.plotWidth/10.0) + 'cm'
+            print 'Requested height: ' + str(pathy.plotHeight/10.0) + 'cm'
+            print 'Max width: ' + str(pathy.mediaWidth/10.0) + 'cm'
+            print 'Max height: ' + str(pathy.mediaHeight/10.0) + 'cm'
             sys.exit()
 
     print '\nCalculated dimensions:'
-    print 'Width: ' + format(patherator.imageWidth/10.0, '.2f') + 'cm'
-    print 'Height: ' + format(patherator.imageHeight/10.0, '.2f') + 'cm'
+    print 'Width: ' + format(pathy.plotWidth/10.0, '.2f') + 'cm'
+    print 'Height: ' + format(pathy.plotHeight/10.0, '.2f') + 'cm'
 
-    patherator.generate(singleFile, preview, savePreview)
+    pathy.generate(singleFile, preview, savePreview)
 
     if alignToMedium:
         print '\n' + '\033[93m' + 'Align tool to bottom left of medium before running!' + '\033[0m'
