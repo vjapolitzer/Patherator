@@ -34,7 +34,7 @@ ToolConfig Configuration Parameters:
 """
 
 import sys, os, argparse, time
-from patherator.run_trace_n_fill import runTraceNFill
+from patherator import tracenfill, artsy
 
 def main(argv):
     # opts, args = getopt.getopt(argv, 'hspi:c:n:', ['help', 'savePreview', 'preview', 'input=',
@@ -64,7 +64,7 @@ def main(argv):
         return
 
     if args.tracenfill:
-        runTraceNFill(args.configFile, args.preview, args.savepreview)
+        tracenfill.run(args.configFile, args.preview, args.savepreview)
 
     if args.artsy:
         raise NotImplementedError("JSON configuration for artsy.py is not "

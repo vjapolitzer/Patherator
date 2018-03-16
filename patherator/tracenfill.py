@@ -8,13 +8,13 @@ finally run Trace N Fill module according to the given parameters.
 
 import os, sys
 from PIL import Image, ImageOps
-from trace_n_fill import TraceNFill
+from tracenfillcore import TraceNFill
 from imagetools import extractColors, filterLoRez, getNumColors
 from toolconfig import ToolConfig
 import json
 from os.path import basename, splitext
 
-def checkDefined(requiredItems, configItems):
+def _checkDefined(requiredItems, configItems):
     """
     Check if all required items are defined
     """
@@ -25,7 +25,7 @@ def checkDefined(requiredItems, configItems):
             allReqsFound = False
     return allReqsFound
 
-def runTraceNFill(configFile, preview, savePreview):
+def run(configFile, preview, savePreview):
     """
     Configure Patherator Trace N Fill according to parameters
     in configFile(JSON) and run the Trace N Fill module
@@ -36,7 +36,7 @@ def runTraceNFill(configFile, preview, savePreview):
         jsonConfig = json.load(jsonFile)
 
     requiredItems = ['plotter', 'plot', 'tools']
-    if not checkDefined(requiredItems, jsonConfig):
+    if not _checkDefined(requiredItems, jsonConfig):
         raise LookupError('Configuration file missing required items!')
 
     plotterConfig = jsonConfig['plotter']
@@ -45,7 +45,7 @@ def runTraceNFill(configFile, preview, savePreview):
 
     requiredItems = ['mediaWidth', 'mediaHeight', 'travelSpeed',
                      'alignToMedium', 'singleFile']
-    if not checkDefined(requiredItems, plotterConfig):
+    if not _checkDefined(requiredItems, plotterConfig):
         raise LookupError('plotter attribute missing required items!')
 
     mediaWidth = plotterConfig['mediaWidth']
@@ -81,7 +81,7 @@ def runTraceNFill(configFile, preview, savePreview):
         postamble = None
 
     requiredItems = ['srcImagePath', 'plotWidth', 'plotHeight']
-    if not checkDefined(requiredItems, plotConfig):
+    if not _checkDefined(requiredItems, plotConfig):
         raise LookupError('plot attribute missing required items!')
 
     srcImagePath = plotConfig['srcImagePath']
@@ -111,7 +111,7 @@ def runTraceNFill(configFile, preview, savePreview):
                      'infillPattern', 'infillAngle', 'infillOverlap',
                      'lowerCommand', 'raiseCommand']
     for tool in toolConfigList:
-        if not checkDefined(requiredItems, tool):
+        if not _checkDefined(requiredItems, tool):
             raise LookupError('tool attribute missing required items!')
 
         newTool = ToolConfig()
