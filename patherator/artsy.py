@@ -68,9 +68,9 @@ class Artsy(object):
         self.design = None
         self.drawSpeed = 20.0
         self.travelSpeed = 40.0
-        self.toolWidth = None
-        self.lowerTool = None
-        self.raiseTool = None
+        self.lineWidth = None
+        self.setLowerCommand = None
+        self.raiseCommand = None
         self.imageWidth = None
         self.imageHeight = None
         self.xRange = None
@@ -81,18 +81,18 @@ class Artsy(object):
         self.image = None
         self.durationTSP = None
 
-    def configure(self, drawSpeed, travelSpeed, toolWidth, durationTSP, hasHome):
+    def configure(self, drawSpeed, travelSpeed, lineWidth, durationTSP, hasHome):
         self.drawSpeed = drawSpeed
         self.travelSpeed = travelSpeed
-        self.toolWidth = toolWidth
+        self.lineWidth = lineWidth
         self.durationTSP = durationTSP
         self.hasHome = hasHome
 
-    def lowerCommand(self, command):
-        self.lowerTool = command
+    def setLowerCommand(self, command):
+        self.lowerCommand = command
 
-    def raiseCommand(self, command):
-        self.raiseTool = command
+    def setRaiseCommand(self, command):
+        self.raiseCommand = command
 
     def loadImage(self, path):
         self.imagePath = path
@@ -202,14 +202,14 @@ class Artsy(object):
             f.write('; Design: ' + self.design + '\n')
             f.write('; Width: ' + str(self.imageWidth/10.0) + 'cm\n')
             f.write('; Height: ' + str(self.imageHeight/10.0) + 'cm\n')
-            f.write('; Tool width: ' + str(self.toolWidth) + 'mm\n')
+            f.write('; Tool width: ' + str(self.lineWidth) + 'mm\n')
             f.write('; Draw speed: ' + str(self.drawSpeed) + 'mm/s\n')
             f.write('; Travel speed: ' + str(self.travelSpeed) + 'mm/s\n')
             f.write(';\n; Begin GCode\n')
             f.write('M106 S255\nM400\nM340 P0 S1000\nG4 P250\n')
             f.write('G21\nG90\n') # preparatory gcode
             initialPosition = 'G92 X' + str(self.align[0]) + ' Y' + str(self.align[1])
-            if 'Z' in self.lowerTool:
+            if 'Z' in self.lowerCommand:
                 initialPosition = initialPosition + ' Z0.0\n'
             else:
                 initialPosition = initialPosition + '\n'
@@ -217,11 +217,11 @@ class Artsy(object):
             # if self.hasHome:
             #     f.write('G28')
             if self.design not in ('spiral'):
-                f.write(self.raiseTool + '\n')
+                f.write(self.raiseCommand + '\n')
 
     def __endGcode(self):
         with open(self.gcodePath, 'a') as f:
-            f.write(self.raiseTool + '\n')
+            f.write(self.raiseCommand + '\n')
             if self.hasHome:
                 f.write('G28 Y\n')
                 f.write('G28 X\n')
@@ -235,10 +235,10 @@ class Artsy(object):
                 if i == 0:
                     if self.design not in ('spiral'):
                         f.write('G0 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f') + ' F' + str(self.travelSpeed*60.0) +'\n')
-                    f.write(self.lowerTool + '\n')
+                    f.write(self.lowerCommand + '\n')
                 else:
                     f.write('G1 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f') + ' F' + str(self.drawSpeed*60.0) +'\n')
-            f.write(self.raiseTool + '\n')
+            f.write(self.raiseCommand + '\n')
         self.__endGcode()
 
     def __drawSegments(self, path):
@@ -249,9 +249,9 @@ class Artsy(object):
                 for i, point in enumerate(segment):
                     if i == 0:
                         if point[0] != prevPoint[0] or point[1] != prevPoint[1]:
-                            f.write(self.raiseTool + '\n')
+                            f.write(self.raiseCommand + '\n')
                             f.write('G0 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f') + ' F' + str(self.travelSpeed*60.0) +'\n')
-                            f.write(self.lowerTool + '\n')
+                            f.write(self.lowerCommand + '\n')
                     else:
                         f.write('G1 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f') + ' F' + str(self.drawSpeed*60.0) +'\n')
                         prevPoint = point
@@ -267,13 +267,13 @@ class Artsy(object):
                 prevPoint = [float('inf'), float('inf')]
                 for i, point in enumerate(s):
                     if i == 0:
-                        f.write(self.raiseTool + '\n')
+                        f.write(self.raiseCommand + '\n')
                         f.write('G0 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f') + ' F' + str(self.travelSpeed*60.0) +'\n')
-                        f.write(self.lowerTool + '\n')
+                        f.write(self.lowerCommand + '\n')
                     elif point[0] != prevPoint[0] or point[1] != prevPoint[1]:
                         f.write('G1 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f') + ' F' + str(self.drawSpeed*60.0) +'\n')
                         prevPoint = point
-            f.write(self.raiseTool + '\n')
+            f.write(self.raiseCommand + '\n')
         self.__endGcode()
 
     def __drawDots(self, dots):
@@ -281,8 +281,8 @@ class Artsy(object):
         with open(self.gcodePath, 'a') as f:
             for point in dots:
                 f.write('G0 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f') + ' F' + str(self.travelSpeed*60.0) +'\n')
-                f.write(self.lowerTool + '\n')
-                f.write(self.raiseTool + '\n')
+                f.write(self.lowerCommand + '\n')
+                f.write(self.raiseCommand + '\n')
         self.__endGcode()
 
     def __offsetOutlines(self, outlines, offset):
@@ -313,7 +313,7 @@ class Artsy(object):
         """
         concentricOutlines = []
         while True:
-            outlines = self.__offsetOutlines(outlines, -(3.0*self.toolWidth)/4.0)
+            outlines = self.__offsetOutlines(outlines, -(3.0*self.lineWidth)/4.0)
             outlines = np.array(outlines)
             # outline = self.__cleanOutline(outline)
             if len(outlines) == 0:
@@ -332,12 +332,12 @@ class Artsy(object):
         self.image = ImageEnhance.Sharpness(self.image).enhance(4.0)
 
         rMax = self.xRange[1]
-        spacing = spacingFactor * self.toolWidth
+        spacing = spacingFactor * self.lineWidth
         maxAmp = spacing / 2.0
         coils = rMax / spacing
         thetaMax = 2.0 * np.pi * coils
         rStep = rMax / thetaMax
-        chord = self.toolWidth
+        chord = self.lineWidth
 
         r = spacing
         theta = (2.0 * np.pi) + (chord / r)
@@ -375,8 +375,8 @@ class Artsy(object):
         self.image = ImageOps.autocontrast(self.image)
 
         path = []
-        spacing = float(spacingFactor) * self.toolWidth
-        segment = self.toolWidth
+        spacing = float(spacingFactor) * self.lineWidth
+        segment = self.lineWidth
 
         ziggy = 1.0
         reverse = False
@@ -388,7 +388,7 @@ class Artsy(object):
             for j in range(0, xRez):
                 xCoord = segment * (j if not reverse else (xRez-1) - j)
                 if shift and not reverse:
-                    xCoord += self.toolWidth / 2.0
+                    xCoord += self.lineWidth / 2.0
                 yCoord = segment * i
                 amp = (spacing / 2.5) * ((255 - self.image.getpixel(((j if not reverse else (xRez-1)-j),i))) / 255.0)
                 yCoord += ziggy * amp
@@ -409,8 +409,8 @@ class Artsy(object):
         self.image = self.image.convert('L')
         self.image = ImageOps.autocontrast(self.image)
 
-        spacing = spacingFactor * self.toolWidth
-        chord = self.toolWidth
+        spacing = spacingFactor * self.lineWidth
+        chord = self.lineWidth
         r = chord
         ziggy = 1.0
         reverse = False
@@ -659,8 +659,8 @@ class Artsy(object):
 
         # self.image.show()
 
-        # First, resize the image so that the pixels correspond to the toolWidth
-        rez = self.toolWidth if mode != 'Delaunay' else 2.0 * self.toolWidth
+        # First, resize the image so that the pixels correspond to the lineWidth
+        rez = self.lineWidth if mode != 'Delaunay' else 2.0 * self.lineWidth
 
         pxWidth = int(self.imageWidth / rez)
         pxHeight = int(self.imageHeight / rez)
@@ -726,7 +726,7 @@ class Artsy(object):
         self.__generateDots(mode = 'TSP', humanError = False)
 
     def __generateSierpinskiTSP(self):
-        rez = self.toolWidth
+        rez = self.lineWidth
         pointsToVisit = []
         dotSize = rez
         pxWidth = int(self.imageWidth / rez)
@@ -759,7 +759,7 @@ class Artsy(object):
         self.image = self.image.convert('L')
         self.image = ImageOps.autocontrast(self.image)
 
-        rez = self.toolWidth * 6.0
+        rez = self.lineWidth * 6.0
 
         pxWidth = int(self.imageWidth / rez)
         pxHeight = int(self.imageHeight / rez)
@@ -793,14 +793,14 @@ class Artsy(object):
                 squares.append([cornerBL, cornerBR, cornerTR, cornerTL, cornerBL])
 
                 if filledSolid:
-                    deltaCorner -= (3.0 * self.toolWidth) / 4.0
+                    deltaCorner -= (3.0 * self.lineWidth) / 4.0
                     while deltaCorner > 0:
                         cornerBL = [x - deltaCorner, y - deltaCorner]
                         cornerBR = [x + deltaCorner, y - deltaCorner]
                         cornerTR = [x + deltaCorner, y + deltaCorner]
                         cornerTL = [x - deltaCorner, y + deltaCorner]
                         squares.append([cornerBL, cornerBR, cornerTR, cornerTL, cornerBL])
-                        deltaCorner -= (3.0 * self.toolWidth) / 4.0
+                        deltaCorner -= (3.0 * self.lineWidth) / 4.0
 
             reverse = not reverse
 
@@ -814,7 +814,7 @@ class Artsy(object):
         self.image = self.image.convert('L')
         self.image = ImageOps.autocontrast(self.image)
 
-        rez = self.toolWidth * 6.0
+        rez = self.lineWidth * 6.0
         numSegs = 16
         thetaStep = (2.0 * np.pi) / float(numSegs)
 
@@ -854,7 +854,7 @@ class Artsy(object):
                 circles.append(circle)
 
                 if filledSolid:
-                    radius -= (3.0 * self.toolWidth) / 4.0
+                    radius -= (3.0 * self.lineWidth) / 4.0
                     while radius > 0:
                         circle = []
 
@@ -865,7 +865,7 @@ class Artsy(object):
                             circle.append([xCirc, yCirc])
 
                         circles.append(circle)
-                        radius -= (3.0 * self.toolWidth) / 4.0
+                        radius -= (3.0 * self.lineWidth) / 4.0
 
             reverse = not reverse
 
@@ -879,7 +879,7 @@ class Artsy(object):
         self.image = self.image.convert('L')
         self.image = ImageOps.autocontrast(self.image)
 
-        rez = self.toolWidth * 6.0
+        rez = self.lineWidth * 6.0
         numSegs = 3
         thetaStep = (2.0 * np.pi) / float(numSegs)
 
@@ -919,7 +919,7 @@ class Artsy(object):
                 triangles.append(triangle)
 
                 if filledSolid:
-                    radius -= (3.0 * self.toolWidth) / 4.0
+                    radius -= (3.0 * self.lineWidth) / 4.0
                     while radius > 0:
                         triangle = []
 
@@ -930,7 +930,7 @@ class Artsy(object):
                             triangle.append([xTri, yTri])
 
                         triangles.append(triangle)
-                        radius -= (3.0 * self.toolWidth) / 4.0
+                        radius -= (3.0 * self.lineWidth) / 4.0
 
             reverse = not reverse
 
@@ -944,7 +944,7 @@ class Artsy(object):
         self.image = self.image.convert('L')
         self.image = ImageOps.autocontrast(self.image)
 
-        rez = self.toolWidth * 6.0
+        rez = self.lineWidth * 6.0
         numSegs = 5
         thetaStep = (2.0 * np.pi) / float(numSegs)
 
@@ -990,7 +990,7 @@ class Artsy(object):
                 stars.append(star)
 
                 if filledSolid:
-                    radius -= (3.0 * self.toolWidth) / 4.0
+                    radius -= (3.0 * self.lineWidth) / 4.0
                     while radius > 0:
                         star = []
 
@@ -1007,7 +1007,7 @@ class Artsy(object):
                         star.append(deepcopy(star[0]))
 
                         stars.append(star)
-                        radius -= (3.0 * self.toolWidth) / 4.0
+                        radius -= (3.0 * self.lineWidth) / 4.0
 
             reverse = not reverse
 
@@ -1021,7 +1021,7 @@ class Artsy(object):
         self.image = self.image.convert('L')
         self.image = ImageOps.autocontrast(self.image)
 
-        rez = self.toolWidth * 6.0
+        rez = self.lineWidth * 6.0
         numSegs = 20
         thetaStep = (2.0 * np.pi) / float(numSegs)
 
@@ -1080,7 +1080,7 @@ class Artsy(object):
         self.image = self.image.convert('L')
         self.image = ImageOps.autocontrast(self.image)
 
-        rez = self.toolWidth * 9.0
+        rez = self.lineWidth * 9.0
 
         pxWidth = int(self.imageWidth / rez)
         pxHeight = int(self.imageHeight / rez)
@@ -1148,7 +1148,7 @@ class Artsy(object):
 
         bmp = potrace.Bitmap(mask)
 
-        poopoo = int(math.pi * (((self.toolWidth * (pattern.size[0]/self.imageWidth)) / 2.0) ** 2))
+        poopoo = int(math.pi * (((self.lineWidth * (pattern.size[0]/self.imageWidth)) / 2.0) ** 2))
 
         # trace the image
         path = bmp.trace(turdsize = poopoo, opttolerance = 0.2)
@@ -1229,7 +1229,7 @@ class Artsy(object):
                     # small to be resolved and are unnecessary
                     lastPoint = patternReduced[-1]
                     for p in scaledPattern:
-                        if distance(p, lastPoint) >= self.toolWidth / 4.0:
+                        if distance(p, lastPoint) >= self.lineWidth / 4.0:
                             lastPoint = p
                             patternReduced.append(p)
 
@@ -1258,7 +1258,7 @@ class Artsy(object):
         self.__drawShapes(patterns)
 
     def __generateRGB(self):
-        rez = self.toolWidth * 3.0
+        rez = self.lineWidth * 3.0
 
         pxWidth = int(self.imageWidth / rez)
         pxHeight = int(self.imageHeight / rez)
@@ -1283,7 +1283,7 @@ class Artsy(object):
                     x, y = i*dotSize, (j if not reverse else self.image.size[1]-1-j)*dotSize
                     y += rez / 2.0
 
-                    deltaBar = ((rez - self.toolWidth) * ((255.0 - float(pxBrightness)) / 255.0) ) / 2.0
+                    deltaBar = ((rez - self.lineWidth) * ((255.0 - float(pxBrightness)) / 255.0) ) / 2.0
 
                     top = [x + c * (rez / 3.0), y + deltaBar]
                     bottom = [x + c * (rez / 3.0), y - deltaBar]
@@ -1305,7 +1305,7 @@ class Artsy(object):
 
     def __generateCMY(self):
 
-        rez = self.toolWidth
+        rez = self.lineWidth
         dotDist = (rez * 4.0) / 3.0
 
         pxWidth = int(self.imageWidth / dotDist)
@@ -1364,8 +1364,8 @@ class Artsy(object):
         self.image = self.image.convert('L')
         self.image = ImageOps.autocontrast(self.image)
 
-        # First, resize the image so that the pixels correspond to the toolWidth
-        rez = 4.0 * self.toolWidth
+        # First, resize the image so that the pixels correspond to the lineWidth
+        rez = 4.0 * self.lineWidth
 
         pxWidth = int(self.imageWidth / rez)
         pxHeight = int(self.imageHeight / rez)
@@ -1596,125 +1596,3 @@ class Artsy(object):
         else:
             print'\n' + '\033[91m' + self.design + ' is not a valid design!' + '\033[0m'
             return False
-
-def usage():
-    print('To convert to gcode:')
-    print('-i <path/to/image>')
-    print('-W <desired width(mm)> and/or -H <desired  height(mm)>')
-    print('-t <tool(i.e. B1)>')
-    print('-w <tool line width(mm)>')
-    print('-s <print speed(mm/s>), defaults to 25')
-    print('-z <zHop(mm) for travel moves>, defaults to 1.5')
-    print('-d <design>')
-    print('\nPossible designs:')
-    print ('spiral, zigzag, radiateBL, radiateL, radiateTL')
-    print('\nexample:')
-    print('./artsy.py -i octopus.jpg -W 8 -H 8 -w 0.5 -s 25 -d spiral')
-
-def main(argv):
-    opts, args = getopt.getopt(argv, 'hi:w:s:z:W:H:d:p:T:a', ['help', 'input=', 'toolWidth=', 'speed=',
-                                                              'width=', 'height=', 'design=', 'pattern=',
-                                                              'time=', 'absolute'])
-    imagePath = None
-    gcodePath = None
-    patternPath = None
-    toolWidth = None
-    speed = 25.0
-    newWidth = None
-    newHeight = None
-    design = None
-    noNegative = False
-    durationTSP = 5.0
-
-    for opt, arg in opts:
-        if opt in ('-h', '--help'):
-            usage()
-            sys.exit()
-        elif opt in ('-i', '--input='):
-            imagePath = arg
-            print 'Input Image: ' + imagePath
-        elif opt in ('-w', '--toolWidth='):
-            toolWidth = float(arg)
-            if toolWidth < 0.0:
-                print '\n' + '\033[91m' + arg + 'mm is not a valid tool width!' + '\033[0m'
-                sys.exit()
-        elif opt in ('-s', '--speed='):
-            speed = float(arg)
-            if speed < 5.0  or speed > 100.0:
-                print '\n' + '\033[91m' + arg + 'mm/s is not a valid speed!' + '\033[0m'
-                sys.exit()
-            print 'Speed: ' + arg + 'mm/s'
-        elif opt in ('-W', '--width='):
-            newWidth = float(arg)*10.0 # convert to mm
-        elif opt in ('-H', '--height='):
-            newHeight = float(arg)*10.0 # convert to mm
-        elif opt in ('-d', '--design='):
-            design = arg
-        elif opt in ('-p', '--pattern='):
-            patternPath = arg
-            print 'Input Pattern: ' + patternPath
-        elif opt in ('-T', '--time='):
-            durationTSP = float(arg)
-            print 'TSP duration: ' + str(durationTSP) + 's'
-        elif opt in ('-a', '--absolute'):
-            noNegative = True
-
-    if imagePath is None:
-        print'\n' + '\033[91m' + 'Please select an input file with -i <imagePath>' + '\033[0m'
-        sys.exit()
-    if design is None:
-        print '\n' + '\033[91m' + 'Please select a design!' + '\033[0m'
-        sys.exit()
-    elif design == 'shapes' and patternPath is None:
-        print'\n' + '\033[91m' + 'Please select a pattern file with -p <patternPath>' + '\033[0m'
-        sys.exit()
-
-    plotBounds = (300.0, 300.0)
-    pathy = Artsy(plotBounds)
-
-    pathy.loadImage(imagePath)
-    pathy.setImagePath(imagePath)
-    gcodePath = splitext(imagePath)[0] + '.gcode'
-    pathy.setGCodePath(gcodePath)
-
-    if patternPath != None:
-        pathy.setPatternPath(patternPath)
-
-    if speed == None:
-        print '\n' + '\033[91m' + 'Please provide a speed in mm/s!' + '\033[0m'
-        sys.exit()
-    if toolWidth == None:
-        print '\n' + '\033[91m' + 'Please set the tool width!' + '\033[0m'
-        sys.exit()
-
-    pathy.configure(speed, 100.0, toolWidth, durationTSP, False)
-    pathy.lowerCommand('M400\nM340 P0 S1500\nG4 P250')
-    pathy.raiseCommand('M400\nM340 P0 S1000\nG4 P250')
-    # pathy.lowerCommand('G1 Z0 F300')
-    # pathy.raiseCommand('G1 Z2 F300')
-    if noNegative:
-        pathy.noNegativeCoords()
-
-    if newWidth is None and newHeight is None:
-        print '\n' + '\033[91m' + 'Please provide a dimension!' + '\033[0m'
-        sys.exit()
-    else:
-        if not pathy.generate(design, newWidth, newHeight):
-            print '\n' + '\033[91m' + 'Error generating plot!' + '\033[0m'
-            sys.exit()
-    print 'Tool width:' + str(pathy.toolWidth) + 'mm'
-    print 'Width: ' + str(pathy.imageWidth/10.0) + 'cm'
-    print 'Height: ' + str(pathy.imageHeight/10.0) + 'cm'
-
-    if design == 'spiral':
-        print '\n' + '\033[93m' + 'Align tool to center of plot before running!' + '\033[0m'
-    else:
-        print '\n' + '\033[93m' + 'Align tool to bottom left of plot before running!' + '\033[0m'
-
-if __name__ == "__main__":
-    startTime = time.time()
-    print ''
-    main(sys.argv[1:])
-    endTime = time.time()
-    print '\033[94m' + '\nTool path generated successfully in:'
-    print format((endTime - startTime), '.2f') + ' seconds' + '\033[0m'

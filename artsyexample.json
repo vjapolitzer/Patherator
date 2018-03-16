@@ -1,0 +1,23 @@
+{
+  "plotter": {
+    "mediaWidth": 132.0,
+    "mediaHeight": 163.0,
+    "travelSpeed": 60.0,
+    "alignToMedium": true,
+    "preamble": "M106 S255\nM400\nM340 P0 S1000\nG4 P250",
+    "postamble": "M106 S0"
+	},
+  "plot": {
+    "srcImagePath": "/home/user/Documents/PlotterArt/doge.jpg",
+    "gcodeSavePath": "/home/user/Documents/PlotterArt/GCODE/suchplotwow.gcode",
+    "plotWidth": 120.0,
+    "plotHeight": 120.0
+  },
+  "tools": {
+      "lineWidth": 0.4,
+      "lowerCommand": "M400\nM340 P0 S1500\nG4 P250",
+      "raiseCommand": "M400\nM340 P0 S1000\nG4 P250",
+      "drawSpeed": 30.0,
+      "design": "spiral"
+    }
+}
