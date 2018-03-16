@@ -10,7 +10,7 @@
 	},
   "plot": {
     "srcImagePath": "/home/user/Documents/PlotterArt/doge.jpg",
-    "gcodeSavePath": "/home/user/Documents/PlotterArt/GCODE/suchplotwowex.gcode",
+    "gcodeSavePath": "/home/user/Documents/PlotterArt/GCODE/suchplotwow.gcode",
     "plotWidth": 100.0,
     "plotHeight": 140.0
   },

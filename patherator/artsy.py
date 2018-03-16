@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 """
-Image2Path
+Patherator Artsy Module
 @author: Vincent Politzer <https://github.com/vjapolitzer>
 
 Dependencies: numpy, scipy, pillow, pypotrace, skimage

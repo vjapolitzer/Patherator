@@ -48,7 +48,6 @@ def runTraceNFill(configFile, preview, savePreview):
     if not checkDefined(requiredItems, plotterConfig):
         raise LookupError('plotter attribute missing required items!')
 
-    preamble, postamble = None, None
     mediaWidth = plotterConfig['mediaWidth']
     mediaHeight = plotterConfig['mediaHeight']
     mediaSize = (mediaWidth, mediaHeight)
@@ -73,9 +72,13 @@ def runTraceNFill(configFile, preview, savePreview):
 
     if 'preamble' in plotterConfig:
         preamble = plotterConfig['preamble']
+    else:
+        preamble = None
 
     if 'postamble' in plotterConfig:
         postamble = plotterConfig['postamble']
+    else:
+        postamble = None
 
     requiredItems = ['srcImagePath', 'plotWidth', 'plotHeight']
     if not checkDefined(requiredItems, plotConfig):
