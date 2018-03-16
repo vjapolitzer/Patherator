@@ -66,6 +66,10 @@ def main(argv):
     if args.tracenfill:
         runTraceNFill(args.configFile, args.preview, args.savepreview)
 
+    if args.artsy:
+        raise NotImplementedError("JSON configuration for artsy.py is not "
+                                  + "implemented, run directly with args")
+
 
 if __name__ == "__main__":
     startTime = time.time()

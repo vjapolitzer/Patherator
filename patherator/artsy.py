@@ -58,7 +58,7 @@ def diagonals(w, h):
              for q in range(max(p-w+1, 0), min(p+1, h))]
             for p in range(w + h - 1) ]
 
-class ImgPathGenerator:
+class Artsy(object):
     def __init__(self, plotBounds):
         self.xMaxPlot = plotBounds[0]
         self.yMaxPlot = plotBounds[1]
@@ -1609,7 +1609,7 @@ def usage():
     print('\nPossible designs:')
     print ('spiral, zigzag, radiateBL, radiateL, radiateTL')
     print('\nexample:')
-    print('./img2art.py -i octopus.jpg -W 8 -H 8 -w 0.5 -s 25 -d spiral')
+    print('./artsy.py -i octopus.jpg -W 8 -H 8 -w 0.5 -s 25 -d spiral')
 
 def main(argv):
     opts, args = getopt.getopt(argv, 'hi:w:s:z:W:H:d:p:T:a', ['help', 'input=', 'toolWidth=', 'speed=',
@@ -1670,15 +1670,15 @@ def main(argv):
         sys.exit()
 
     plotBounds = (300.0, 300.0)
-    patherator = ImgPathGenerator(plotBounds)
+    pathy = Artsy(plotBounds)
 
-    patherator.loadImage(imagePath)
-    patherator.setImagePath(imagePath)
+    pathy.loadImage(imagePath)
+    pathy.setImagePath(imagePath)
     gcodePath = splitext(imagePath)[0] + '.gcode'
-    patherator.setGCodePath(gcodePath)
+    pathy.setGCodePath(gcodePath)
 
     if patternPath != None:
-        patherator.setPatternPath(patternPath)
+        pathy.setPatternPath(patternPath)
 
     if speed == None:
         print '\n' + '\033[91m' + 'Please provide a speed in mm/s!' + '\033[0m'
@@ -1687,24 +1687,24 @@ def main(argv):
         print '\n' + '\033[91m' + 'Please set the tool width!' + '\033[0m'
         sys.exit()
 
-    patherator.configure(speed, 100.0, toolWidth, durationTSP, False)
-    patherator.lowerCommand('M400\nM340 P0 S1500\nG4 P250')
-    patherator.raiseCommand('M400\nM340 P0 S1000\nG4 P250')
-    # patherator.lowerCommand('G1 Z0 F300')
-    # patherator.raiseCommand('G1 Z2 F300')
+    pathy.configure(speed, 100.0, toolWidth, durationTSP, False)
+    pathy.lowerCommand('M400\nM340 P0 S1500\nG4 P250')
+    pathy.raiseCommand('M400\nM340 P0 S1000\nG4 P250')
+    # pathy.lowerCommand('G1 Z0 F300')
+    # pathy.raiseCommand('G1 Z2 F300')
     if noNegative:
-        patherator.noNegativeCoords()
+        pathy.noNegativeCoords()
 
     if newWidth is None and newHeight is None:
         print '\n' + '\033[91m' + 'Please provide a dimension!' + '\033[0m'
         sys.exit()
     else:
-        if not patherator.generate(design, newWidth, newHeight):
+        if not pathy.generate(design, newWidth, newHeight):
             print '\n' + '\033[91m' + 'Error generating plot!' + '\033[0m'
             sys.exit()
-    print 'Tool width:' + str(patherator.toolWidth) + 'mm'
-    print 'Width: ' + str(patherator.imageWidth/10.0) + 'cm'
-    print 'Height: ' + str(patherator.imageHeight/10.0) + 'cm'
+    print 'Tool width:' + str(pathy.toolWidth) + 'mm'
+    print 'Width: ' + str(pathy.imageWidth/10.0) + 'cm'
+    print 'Height: ' + str(pathy.imageHeight/10.0) + 'cm'
 
     if design == 'spiral':
         print '\n' + '\033[93m' + 'Align tool to center of plot before running!' + '\033[0m'

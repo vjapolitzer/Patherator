@@ -48,6 +48,7 @@ def runTraceNFill(configFile, preview, savePreview):
     if not checkDefined(requiredItems, plotterConfig):
         raise LookupError('plotter attribute missing required items!')
 
+    preamble, postamble = None, None
     mediaWidth = plotterConfig['mediaWidth']
     mediaHeight = plotterConfig['mediaHeight']
     mediaSize = (mediaWidth, mediaHeight)
@@ -70,6 +71,12 @@ def runTraceNFill(configFile, preview, savePreview):
     if not isinstance(singleFile, bool):
         raise ValueError("alignToMedium must be a bool!")
 
+    if 'preamble' in plotterConfig:
+        preamble = plotterConfig['preamble']
+
+    if 'postamble' in plotterConfig:
+        postamble = plotterConfig['postamble']
+
     requiredItems = ['srcImagePath', 'plotWidth', 'plotHeight']
     if not checkDefined(requiredItems, plotConfig):
         raise LookupError('plot attribute missing required items!')
@@ -86,9 +93,6 @@ def runTraceNFill(configFile, preview, savePreview):
     plotWidth = plotConfig['plotWidth']
     plotHeight = plotConfig['plotHeight']
 
-    print gcodeSavePath
-    sys.exit()
-
     print '\nOriginal image: ' + basename(srcImagePath)
 
     pathy = TraceNFill()
@@ -100,91 +104,40 @@ def runTraceNFill(configFile, preview, savePreview):
     pathy.setGCodeSavePath(gcodeSavePath)
 
     segmentNumber = 1
-    for plotConfig in configuration[2:]:
-        if plotConfig[0][0] == ';':
-            continue
-        for config in plotConfig:
-            configTok = config.split('=')
-            configTok[0] = configTok[0].lower()
-            if configTok[0] == 'toolwidth':
-                lineWidth = float(configTok[1])
-                if lineWidth < 0.0:
-                    print '\033[91m' + configTok[1] + 'mm is not a valid tool width!' + '\033[0m'
-                    sys.exit()
-            elif configTok[0] == 'lowercommand':
-                lowerTool = configTok[1].replace('|', '\n')
-            elif configTok[0] == 'raisecommand':
-                raiseTool = configTok[1].replace('|', '\n')
-            elif configTok[0] == 'toolselect':
-                toolSelect = configTok[1].replace('|', '\n')
-            elif configTok[0] == 'perimeters':
-                perimeters = int(configTok[1])
-                if perimeters < 0:
-                    print '\033[91m' + configTok[1] + ' is not a valid number of perimeters!' + '\033[0m'
-                    sys.exit()
-            elif configTok[0] == 'drawspeed':
-                drawSpeed = float(configTok[1])
-                if drawSpeed < 0.0:
-                    print '\033[91m' + configTok[1] + 'mm/s is not a valid drawSpeed!' + '\033[0m'
-                    sys.exit()
-            elif configTok[0] == 'infilldensity':
-                infillDensity = float(configTok[1])
-                if infillDensity < 0.0 or infillDensity > 100.0:
-                    print '\033[91m' + configTok[1] + '% is not a valid density!' + '\033[0m'
-                    sys.exit()
-            elif configTok[0] == 'infillpattern':
-                infillPattern = configTok[1].lower()
-                if not infillPattern in ('linear', 'zigzag', 'grid', 'triangle', 'spiral', 'golden',
-                                         'sunflower', 'hilbert', 'gosper', 'peano', 'sierpinski',
-                                         'concentric',  'hexagon', 'octagramspiral', 'david', 'shapefill'):
-                    print '\033[91m' + infillPattern + ' is not a valid infill type!' + '\033[0m'
-                    sys.exit()
-            elif configTok[0] == 'infillangle':
-                infillAngle = float(configTok[1])
-            elif configTok[0] == 'infilloverlap':
-                infillOverlap = float(configTok[1])
-                if infillOverlap < 0.0 or infillOverlap > 100.0:
-                    print '\033[91m' + infillOverlap + '% is not a valid overlap!' + '\033[0m'
-                    sys.exit()
-            elif configTok[0] == 'patternpath':
-                patternPath = configTok[1]
-            else:
-                print '\033[91m' + 'Unknown parameter: ' + config + '\033[0m'
-                sys.exit()
-        if lowerTool is None or raiseTool is None:
-            print '\033[91m' + 'Undefined raise or lower commands!' + '\033[0m'
-            sys.exit()
-        if infillPattern == 'shapefill' and patternPath is None:
-            print '\033[91m' + 'Path to pattern image not provided!' + '\033[0m'
-            sys.exit()
-        if infillPattern != 'shapefill' and patternPath is not None:
-            print '\n' + '\033[93m' + 'Selected fill pattern is ' + infillPattern + ', supplied pattern image will not be used!' + '\033[0m'
+    requiredItems = ['lineWidth', 'perimeters', 'drawSpeed', 'infillDensity',
+                     'infillPattern', 'infillAngle', 'infillOverlap',
+                     'lowerCommand', 'raiseCommand']
+    for tool in toolConfigList:
+        if not checkDefined(requiredItems, tool):
+            raise LookupError('tool attribute missing required items!')
 
         newTool = ToolConfig()
-        newTool.lineWidth = lineWidth
-        newTool.lowerTool = lowerTool
-        newTool.raiseTool = raiseTool
-        newTool.toolSelect = toolSelect
-        newTool.perimeters = perimeters
-        newTool.drawSpeed = drawSpeed
-        newTool.infillDensity = infillDensity
-        newTool.infillPattern = infillPattern
-        newTool.infillAngle = infillAngle
-        newTool.infillOverlap = infillOverlap
-        newTool.patternPath = patternPath
+        newTool.lineWidth = tool['lineWidth']
+        newTool.perimeters = tool['perimeters']
+        newTool.drawSpeed = tool['drawSpeed']
+        newTool.infillDensity = tool['infillDensity']
+        newTool.infillPattern = tool['infillPattern']
+        newTool.infillAngle = tool['infillAngle']
+        newTool.infillOverlap = tool['infillOverlap']
+        newTool.lowerCommand = tool['lowerCommand']
+        newTool.raiseCommand = tool['raiseCommand']
+
+        if 'toolSelect' in tool:
+            newTool.toolSelect = tool['toolSelect']
+
         pathy.addTool(newTool)
 
         print '\nPart ' + str(segmentNumber) + ' Configuration:'
-        if toolSelect is not None:
-            print 'Tool select: ' + toolSelect.replace('\n', '|')
-        print 'Tool width:' + str(lineWidth) + 'mm'
-        print 'Perimeters: ' + str(perimeters)
-        print 'Speed: ' + str(drawSpeed) + 'mm/s'
-        print 'Infill density: ' + str(infillDensity) + '%'
-        print 'Infill type: ' + infillPattern
-        print 'Infill angle: ' + str(infillAngle) + 'deg'
-        if perimeters > 0:
-            print 'Infill overlap: ' + str(infillOverlap) + '%'
+        if newTool.toolSelect is not None:
+            print 'Tool select: ' + newTool.toolSelect.replace('\n', '|')
+        print 'Tool width:' + str(newTool.lineWidth) + 'mm'
+        print 'Perimeters: ' + str(newTool.perimeters)
+        print 'Speed: ' + str(newTool.drawSpeed) + 'mm/s'
+        print 'Infill density: ' + str(newTool.infillDensity) + '%'
+        print 'Infill pattern: ' + basename(newTool.infillPattern)
+        print 'Infill angle: ' + str(newTool.infillAngle) + 'deg'
+        if newTool.perimeters > 0:
+            print 'Infill overlap: ' + str(newTool.infillOverlap) + '%'
         segmentNumber += 1
 
     numColors = pathy.numTools() + 1

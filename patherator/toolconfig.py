@@ -13,7 +13,7 @@ validInfillPatterns = ('none', 'linear', 'zigzag', 'grid', 'triangle', 'spiral',
                        'concentric',  'hexagon', 'octagramspiral', 'david')
 # TODO: Move valid infill patterns into infill file once created, and import value.
 
-class ToolConfig:
+class ToolConfig(object):
     """
     Class ToolConfig stores tool parameters for path generation
     """
@@ -25,8 +25,8 @@ class ToolConfig:
         self._infillPattern = None
         self._infillAngle = None
         self._infillOverlap = None
-        self._lowerTool = None
-        self._raiseTool= None
+        self._lowerCommand = None
+        self._raiseCommand= None
         self._toolSelect = None
 
     @property
@@ -87,8 +87,9 @@ class ToolConfig:
         return self._infillPattern
     @infillPattern.setter
     def infillPattern(self, val):
-        val = val.lower()
-        if val in validInfillPatterns or os.path.isfile(val):
+        if val.lower() in validInfillPatterns:
+            self._infillPattern = val.lower()
+        elif os.path.isfile(val):
             self._infillPattern = val
         else:
             raise ValueError("infillPattern not valid or shapeFill image not found!")
@@ -120,26 +121,26 @@ class ToolConfig:
             raise ValueError("infillOverlap must be in range 0.0-100.0 (inclusive)!")
 
     @property
-    def lowerTool(self):
+    def lowerCommand(self):
         """GCode string for machine specific lower command"""
-        return self._lowerTool
-    @lowerTool.setter
-    def lowerTool(self, val):
-        if isinstance(val, str):
-            self._lowerTool = val
+        return self._lowerCommand
+    @lowerCommand.setter
+    def lowerCommand(self, val):
+        if isinstance(val, (str, unicode)):
+            self._lowerCommand = val
         else:
-            raise ValueError("lowerTool must be a string!")
+            raise ValueError("lowerCommand must be a string!")
 
     @property
-    def raiseTool(self):
+    def raiseCommand(self):
         """GCode string for machine specific raise command"""
-        return self._raiseTool
-    @raiseTool.setter
-    def raiseTool(self, val):
-        if isinstance(val, str):
-            self._raiseTool = val
+        return self._raiseCommand
+    @raiseCommand.setter
+    def raiseCommand(self, val):
+        if isinstance(val, (str, unicode)):
+            self._raiseCommand = val
         else:
-            raise ValueError("raiseTool must be a string!")
+            raise ValueError("raiseCommand must be a string!")
 
     @property
     def toolSelect(self):
@@ -147,7 +148,7 @@ class ToolConfig:
         return self._toolSelect
     @toolSelect.setter
     def toolSelect(self, val):
-        if isinstance(val, str):
+        if isinstance(val, (str, unicode)):
             self._toolSelect = val
         else:
             raise ValueError("toolSelect must be a string!")

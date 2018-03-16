@@ -13,8 +13,8 @@ Example:
   pathy.addImageData(imageData) # Example below for generating data
   newTool = ToolConfig()
   newTool.lineWidth = lineWidth
-  newTool.lowerTool = lowerTool
-  newTool.raiseTool = raiseTool
+  newTool.lowerCommand = lowerCommand
+  newTool.raiseCommand = raiseCommand
   newTool.toolSelect = toolSelect
   newTool.perimeters = perimeters
   newTool.drawSpeed = drawSpeed
@@ -37,6 +37,19 @@ Example:
             if im_px[i,j] < 128:
                 imageData[i,j] = 1
   """
+
+from toolconfig import ToolConfig
+from imagetools import extractColors, filterLoRez
+import os, math
+from copy import deepcopy
+import numpy as np
+import scipy
+from scipy import spatial
+from PIL import Image, ImageOps
+import potrace, pyclipper
+from skimage.draw import line_aa as drawLine
+import skimage.morphology as skmorph
+
 
 def mapToRange(val, srcMax, dst):
     """
@@ -66,121 +79,7 @@ def distance(p0, p1):
     """
     return math.sqrt((p0[0] - p1[0]) ** 2 + (p0[1] - p1[1]) ** 2)
 
-def brightness(color):
-    """
-    Returns the luminance of a color in RGB form
-    """
-    return 0.2126*color[0] + 0.7152*color[1] + 0.0722*color[2]
-
-def getBackgroundColor(im):
-    """
-    Detect the background color of an image.
-    The color is assumed to be the the most common
-    pixel color along the border of the image.
-    """
-    borderPixels = []
-    borderColors = []
-    for x in range(im.size[0]):
-        # Get pixel along top
-        px = im.getpixel((x, 0))[:3]
-        borderPixels.append(px)
-        if px not in borderColors:
-            borderColors.append(px)
-
-        # Get pixel along bottom
-        px = im.getpixel((x, im.size[1] - 1))[:3]
-        borderPixels.append(px)
-        if px not in borderColors:
-            borderColors.append(px)
-
-    for y in range(1, im.size[1] - 1):
-        # Get pixel along left
-        px = im.getpixel((1, y))[:3]
-        borderPixels.append(px)
-        if px not in borderColors:
-            borderColors.append(px)
-
-        # Get pixel along right
-        px = im.getpixel((im.size[0] - 1 - 1, y))[:3]
-        borderPixels.append(px)
-        if px not in borderColors:
-            borderColors.append(px)
-
-    mostOccurrences = 0
-    mostCommonColor = None
-    for color in borderColors:
-        numOccurrences = borderPixels.count(color)
-        if numOccurrences > mostOccurrences:
-            mostOccurrences = numOccurrences
-            mostCommonColor = color
-
-    return mostCommonColor # RGB value tuple for background color
-
-def filterLoRez(im, desiredNumColors):
-    """
-    Filter low resolution images to reduce compression
-    and anti-alias artifacts
-    """
-    # TODO: Tweak to play nicer with certain colors
-    im = im.convert('P', palette = Image.ADAPTIVE, colors = int(desiredNumColors+1))
-    im = im.convert('RGB')
-    im = np.array(im)
-
-    for i in range(10):
-        im = denoise_bilateral(im, sigma_color=0.088, sigma_spatial=0.5, multichannel = True)
-    for i in range(13):
-        im = denoise_bilateral(im, sigma_color=0.030, sigma_spatial=1.0, multichannel = True)
-
-    # skio.imshow(im)
-    # skio.show()
-    # return
-
-    im = Image.fromarray((im * 255).astype(np.uint8))
-
-    return im
-
-def extractColors(im, numColors):
-    """
-    Reduced im to numColors, and returns a list
-    of mask, color pairs
-    """
-    im = im.convert('P', palette = Image.ADAPTIVE, colors = int(numColors))
-
-    data = np.array(im.convert('RGBA'))
-    colorData = data.T
-    red, green, blue, alpha = data.T
-    im = Image.fromarray(data)
-
-    im_colors = im.convert('RGB').getcolors()
-    im_colors = sorted(im_colors, key=lambda x: brightness(x[1]))
-    im_colors.reverse()
-
-    # name = srcImagePath.split('.')
-    # newname = name[0] + "_adapt.jpg"
-    # im.convert('RGB').save(newname)
-
-    width, height = im.size
-
-    backgroundColor = getBackgroundColor(im)
-
-    colorSegments = []
-    for numpixels, color in im_colors:
-        if color != backgroundColor:
-
-            color_area = (red == color[0]) & (green == color[1]) & (blue == color[2]) # T/F Matrix of color location
-            indices = np.where(color_area == True)
-            coordinates = zip(indices[0], indices[1]) # stored col,row
-
-            mask = np.zeros((width, height))
-
-            for c in coordinates:
-                mask[c[0]][c[1]] = 1
-
-            colorSegments.append([mask, color])
-
-    return colorSegments
-
-class TraceNFill:
+class TraceNFill(object):
     def __init__(self):
         self.mediaWidth = 0.0
         self.mediaHeight = 0.0
@@ -657,7 +556,7 @@ class TraceNFill:
             for outline in offsetIsle:
                 self.__fixLoop(outline)
             newOutlines.append(offsetIsle)
-            pco.Clear()        # sys.exit()
+            pco.Clear()
 
         return newOutlines
 
@@ -1043,7 +942,7 @@ class TraceNFill:
         """
         with open(self.gcodeSavePath, 'w') as f:
             f.write('; Patherator Trace N Fill GCode\n;\n')
-            f.write('; Original image: ' + basename(self.srcImagePath) + '\n;\n')
+            f.write('; Original image: ' + os.path.basename(self.srcImagePath) + '\n;\n')
             f.write('; Width: ' + str(self.plotWidth/10.0) + 'cm\n')
             f.write('; Height: ' + str(self.plotHeight/10.0) + 'cm\n;\n')
 
@@ -1136,7 +1035,7 @@ class TraceNFill:
 
         self.startPoint = allOutlines[-1][-1]
 
-        if toolConfig.infillPattern != 'none':
+        if toolConfig.infillPattern != 'none' or toolConfig.infillDensity > 0.0:
             infill = self.__calculateInfill(infillPerimeter, np.copy(allOutlines[-1][0]), toolConfig)
             if len(infill) > 0:
                 self.startPoint = infill[-1][-1][-1]
@@ -1163,10 +1062,10 @@ class TraceNFill:
                     firstPoint = outline[0]
                     for j, point in enumerate(outline):
                         if j == 0:
-                            f.write(toolConfig.raiseTool + '\n')
+                            f.write(toolConfig.raiseCommand + '\n')
                             f.write('G0 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f')
                                     + ' F' + str(self.travelSpeed*60.0) +'\n')
-                            f.write(toolConfig.lowerTool + '\n')
+                            f.write(toolConfig.lowerCommand + '\n')
                         else:
                             f.write('G1 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f')
                                     + ' F' + str(toolConfig.drawSpeed*60.0) +'\n')
@@ -1182,10 +1081,10 @@ class TraceNFill:
                             if k == 0:
                                 if j > 0 and compPt(point, islandFill[j-1][-1]):
                                     continue # previous was same position, already in position
-                                f.write(toolConfig.raiseTool + '\n')
+                                f.write(toolConfig.raiseCommand + '\n')
                                 f.write('G0 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f')
                                         + ' F' + str(self.travelSpeed*60.0) +'\n')
-                                f.write(toolConfig.lowerTool + '\n')
+                                f.write(toolConfig.lowerCommand + '\n')
                             else:
                                 f.write('G1 X' + format(point[0], '.8f') + ' Y' + format(point[1], '.8f')
                                         + ' F' + str(toolConfig.drawSpeed*60.0) +'\n')
@@ -1193,7 +1092,7 @@ class TraceNFill:
                             f.write('G1 X' + format(firstPoint[0], '.8f') + ' Y' + format(firstPoint[1], '.8f')
                                     + ' F' + str(toolConfig.drawSpeed*60.0) +'\n')
 
-            f.write(toolConfig.raiseTool + '\n')
+            f.write(toolConfig.raiseCommand + '\n')
 
     def __generateAllPaths(self, generatePreview):
         """
@@ -1248,6 +1147,9 @@ class TraceNFill:
 
     def generate(self, singleFile = False, preview = True, savePreview = False):
         print('\nGenerating toolpaths...')
+        gcodeSaveDirectory = os.path.dirname(self.gcodeSavePath)
+        if not os.path.exists(gcodeSaveDirectory):
+            os.mkdir(gcodeSaveDirectory)
         basePath = self.gcodeSavePath.split('.')[0]
         if singleFile:
             self.__initGcode()

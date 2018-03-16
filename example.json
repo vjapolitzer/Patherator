@@ -1,0 +1,41 @@
+{
+  "plotter": {
+    "mediaWidth": 114.0,
+    "mediaHeight": 165.0,
+    "travelSpeed": 60.0,
+    "alignToMedium": true,
+    "singleFile": true,
+    "preamble": "M106 S255\nM400\nM340 P0 S1000\nG4 P250",
+    "postamble": "M106 S0"
+	},
+  "plot": {
+    "srcImagePath": "/home/user/Documents/PlotterArt/doge.jpg",
+    "gcodeSavePath": "/home/user/Documents/PlotterArt/GCODE/suchplotwowex.gcode",
+    "plotWidth": 100.0,
+    "plotHeight": 140.0
+  },
+  "tools": [
+    {
+      "lineWidth": 0.4,
+      "lowerCommand": "M400\nM340 P0 S1500\nG4 P250",
+      "raiseCommand": "M400\nM340 P0 S1000\nG4 P250",
+      "perimeters": 1,
+      "drawSpeed": 30.0,
+      "infillDensity": 50.0,
+      "infillPattern": "linear",
+      "infillAngle": 45.0,
+      "infillOverlap": 50.0
+    },
+    {
+      "lineWidth": 0.4,
+      "lowerCommand": "M400\nM340 P0 S1500\nG4 P250",
+      "raiseCommand": "M400\nM340 P0 S1000\nG4 P250",
+      "perimeters": 2,
+      "drawSpeed": 30.0,
+      "infillDensity": 91.0,
+      "infillPattern": "/home/user/Documents/PlotterArt/alpaca.png",
+      "infillAngle": 0.0,
+      "infillOverlap": 50.0
+    }
+  ]
+}
